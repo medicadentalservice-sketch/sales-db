@@ -3,81 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sales Command Center | Pipeline Dashboard</title>
+<title>Sales Pipeline Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0a0c10; --surface: #111318; --surface2: #181c23; --border: #ffffff0f;
-    --accent: #ffb703; --accent3: #219ebc; --text: #f0f2f7; --muted: #6b7280;
-    --closed: #00e5a0; --open: #4d9fff; --inprogress: #f0b429; --waiting: #fb8500;
+    --accent: #ffb703; --text: #f0f2f7; --muted: #6b7280;
+    --won: #00e5a0; --new: #4d9fff; --quote: #f0b429; --lost: #ff6b35;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); min-height:100vh; overflow-x: hidden; }
-  
-  /* Grid Background Effect */
-  body::before { 
-    content:''; position:fixed; inset:0; 
-    background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px); 
-    background-size:40px 40px; pointer-events:none; z-index:0; 
-  }
-
+  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); min-height:100vh; }
+  body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px); background-size:40px 40px; pointer-events:none; z-index:0; }
   .container { position:relative; z-index:1; max-width:1200px; margin:0 auto; padding:40px 24px; }
-  
-  header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:32px; flex-wrap:wrap; gap:20px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
-  .logo-area h1 { font-family:'Syne',sans-serif; font-size:24px; font-weight:800; letter-spacing: -1px; }
+  header { display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; }
+  .logo-area h1 { font-family:'Syne',sans-serif; font-size:24px; font-weight:800; }
   .logo-area h1 span { color:var(--accent); }
-  .logo-area p { font-size:11px; color:var(--muted); margin-top:4px; letter-spacing:2px; text-transform:uppercase; }
   
   #loading { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:50vh; gap:20px; }
   .spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
   @keyframes spin { to{transform:rotate(360deg)} }
+
+  .team-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:28px; }
+  .rep-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px; cursor:pointer; transition: 0.2s; position:relative; }
+  .rep-card.active { border: 1px solid white; background: var(--surface2); }
   
-  #content { display:none; animation:fadeIn .6s cubic-bezier(0.16, 1, 0.3, 1); }
-  @keyframes fadeIn { from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)} }
-
-  /* Sales Rep Cards */
-  .overview-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:28px; }
-  .rep-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; cursor:pointer; transition:all .2s; position:relative; overflow:hidden; }
-  .rep-card:hover { transform:translateY(-3px); background:var(--surface2); border-color: #ffffff22; }
-  .rep-card.active-rep { border: 1px solid white; background:var(--surface2); }
-  .rep-card-name { font-family:'Syne',sans-serif; font-size:14px; font-weight:800; margin-bottom:8px; }
-  .rep-card-total { font-size:11px; color:var(--muted); }
-
-  /* Statistics Row */
-  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
-  @media(max-width:700px){ .stats-grid { grid-template-columns:repeat(2,1fr); } }
+  .stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--border); opacity: 0.5; cursor:pointer; }
+  .stat-card.active-filter { opacity: 1; border-color: #fff; }
   
-  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; position:relative; cursor:pointer; transition:all 0.2s; opacity: 0.4; }
-  .stat-card:hover { opacity: 0.8; background:var(--surface2); }
-  .stat-card.active-slice { border: 1px solid #ffffff44; opacity: 1; transform: scale(1.02); box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
-  .stat-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:3px; opacity: 0.6; }
-  .stat-card.won::after { background:var(--closed); }
-  .stat-card.new::after { background:var(--open); }
-  .stat-card.quote::after { background:var(--inprogress); }
-  .stat-card.lost::after { background:var(--waiting); }
-  .stat-value { font-family:'Syne',sans-serif; font-size:42px; font-weight:800; line-height:1; margin-top: 5px; }
-  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing: 1px; }
-
-  /* Table Section */
-  .table-section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  .table-scroll { overflow-x: auto; }
+  .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow-x:auto; }
   table { width:100%; border-collapse:collapse; font-size:12px; min-width: 800px; }
-  th { padding:14px 16px; text-align:left; background:var(--surface2); color:var(--muted); text-transform:uppercase; font-size:10px; letter-spacing: 1px; }
-  td { padding:14px 16px; border-bottom:1px solid var(--border); vertical-align: middle; }
-  tr:hover { background: #ffffff05; }
-
-  /* Badges */
-  .status-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:100px; font-size:10px; font-weight:600; text-transform: capitalize; }
-  .status-badge::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  th { padding:15px; text-align:left; background:var(--surface2); color:var(--muted); text-transform:uppercase; font-size:10px; }
+  td { padding:15px; border-bottom:1px solid var(--border); }
+  .status-tag { padding:4px 10px; border-radius:100px; font-size:10px; font-weight:700; }
+  .tag-new { background:#4d9fff20; color:var(--new); }
+  .tag-old { background:#f0b42920; color:var(--quote); }
   
-  .badge-won { background:#00e5a015; color:var(--closed); border:1px solid #00e5a030; }
-  .badge-new { background:#4d9fff15; color:var(--open); border:1px solid #4d9fff30; }
-  .badge-quote { background:#f0b42915; color:var(--inprogress); border:1px solid #f0b42930; }
-  .badge-lost { background:#ff6b3515; color:var(--waiting); border:1px solid #ff6b3530; }
-
-  .refresh-btn { background:var(--accent); border:none; color:#000; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; transition: 0.2s; }
-  .refresh-btn:hover { background: #ffca3a; transform: scale(1.05); }
-  .spinning span { animation:spin 0.8s linear infinite; display:inline-block; }
+  .refresh-btn { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -86,201 +48,126 @@
   <header>
     <div class="logo-area">
       <h1>Sales <span>Pipeline</span></h1>
-      <p>Performance Command Center</p>
+      <p>Performance Dashboard</p>
     </div>
-    <button class="refresh-btn" onclick="loadData()" id="rbtn"><span>↻</span> Refresh Data</button>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </header>
 
   <div id="loading">
     <div class="spinner"></div>
-    <p style="color: var(--muted); font-size: 12px; letter-spacing: 1px;">SYNCING GOOGLE SHEETS...</p>
+    <p>Connecting to Google Sheets...</p>
   </div>
 
-  <div id="content">
-    <div style="margin-bottom:15px; font-size:10px; text-transform:uppercase; color:var(--muted); letter-spacing:2px;">Sales Team Roster</div>
-    <div class="overview-grid" id="overview-grid"></div>
-
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <div style="font-family:Syne; font-size:20px; font-weight:800; color:var(--accent);" id="view-title">All Sales Reps</div>
-        <div style="font-size: 10px; color: var(--muted);">Click cards to filter view</div>
-    </div>
+  <div id="content" style="display:none;">
+    <div class="team-grid" id="team-grid"></div>
 
     <div class="stats-grid">
-      <div class="stat-card won active-slice" id="btn-Won" onclick="toggleSlice('Won')">
-        <div class="stat-label">Closed Won</div>
-        <div class="stat-value" style="color:var(--closed)" id="count-won">0</div>
+      <div class="stat-card active-filter" id="f-new" onclick="toggleStatus('New')">
+        <small>NEW LEADS</small>
+        <div id="c-new" style="font-size:32px; font-weight:800; color:var(--new)">0</div>
       </div>
-      <div class="stat-card new active-slice" id="btn-New" onclick="toggleSlice('New')">
-        <div class="stat-label">New Leads</div>
-        <div class="stat-value" style="color:var(--open)" id="count-new">0</div>
-      </div>
-      <div class="stat-card quote active-slice" id="btn-Quote" onclick="toggleSlice('Quote')">
-        <div class="stat-label">Quote Sent</div>
-        <div class="stat-value" style="color:var(--inprogress)" id="count-quote">0</div>
-      </div>
-      <div class="stat-card lost active-slice" id="btn-Lost" onclick="toggleSlice('Lost')">
-        <div class="stat-label">Closed Lost</div>
-        <div class="stat-value" style="color:var(--waiting)" id="count-lost">0</div>
+      <div class="stat-card active-filter" id="f-old" onclick="toggleStatus('Old')">
+        <small>OLD/EXISTING</small>
+        <div id="c-old" style="font-size:32px; font-weight:800; color:var(--quote)">0</div>
       </div>
     </div>
 
-    <div class="table-section">
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Account Name</th>
-              <th>City</th>
-              <th>Rep Name</th>
-              <th>Product/Brands</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
-      </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Account</th>
+            <th>City</th>
+            <th>Rep</th>
+            <th>Brands</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
     </div>
   </div>
 </div>
 
 <script>
-/** * CONFIGURATION
- * The script URL connects this HTML to your Google Apps Script bridge.
+/**
+ * REPLACED WITH YOUR NEW AUTHORIZED URL
  */
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxyGQYuvyUIEuGo6te3O-4a1KgRY93Y0sH-JbVHBCHuMNWR-jvuUcr6WjKdhzCD5yVt2g/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUmRyHy1KPGfSfeIIJRhzwjU4DREEniTElvYe0-L9k8HtJXtXH56D2sNItV0aMivgBhQ/exec";
 
-const SALES_TEAM = [
-  {name:"Mohamed Agha", color:"#4d9fff"},
-  {name:"Munadel Yassine", color:"#a855f7"},
-  {name:"Yahya Aldaour", color:"#00e5a0"},
-  {name:"Mohamed Almech", color:"#f0b429"},
-  {name:"Mohamed Hamdy", color:"#ff6b35"}
-];
+const TEAM = ["Mohamed Hamdy", "Mohamed Almech", "Mohamed Agha", "Munadel Yassine", "Yahya Aldaour"];
 
-let allData = [];
-let currentRep = 'all';
-let selectedStatuses = ['Won', 'New', 'Quote', 'Lost'];
-
-window.onload = () => loadData();
+let rawData = [];
+let selRep = 'All';
+let selStatus = ['New', 'Old'];
 
 async function loadData() {
-  const btn = document.getElementById('rbtn');
-  btn.classList.add('spinning');
-  
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('content').style.display = 'none';
   try {
     const res = await fetch(SCRIPT_URL + "?t=" + Date.now());
-    allData = await res.json();
-    
+    rawData = await res.json();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
-    refreshUI();
+    render();
   } catch(e) { 
-    console.error("Error loading data:", e);
-    alert("Could not sync data. Check your Script URL and Google Sheet permissions.");
+    console.error(e);
+    alert("Still having trouble syncing. Check your App Script Deployment access is set to 'Anyone'.");
   }
+}
+
+function render() {
+  // Render Team Filter Cards
+  const grid = document.getElementById('team-grid');
+  grid.innerHTML = `<div class="rep-card ${selRep==='All'?'active':''}" onclick="filterRep('All')"><b>Full Team</b><br><small>${rawData.length} Leads</small></div>` + 
+    TEAM.map(name => {
+      const count = rawData.filter(r => (r['Name']||'').includes(name)).length;
+      return `<div class="rep-card ${selRep===name?'active':''}" onclick="filterRep('${name}')"><b>${name}</b><br><small>${count} Leads</small></div>`;
+    }).join('');
+
+  // Filter Data
+  let filtered = selRep === 'All' ? rawData : rawData.filter(r => (r['Name']||'').includes(selRep));
   
-  btn.classList.remove('spinning');
-}
-
-function refreshUI() {
-  renderOverview();
-  updateStats();
-  renderTable();
-}
-
-function renderOverview() {
-  const grid = document.getElementById('overview-grid');
-  grid.innerHTML = SALES_TEAM.map(rep => {
-    const t = allData.filter(r => (r['Name']||'').trim().toLowerCase() === rep.name.toLowerCase());
-    const isActive = currentRep === rep.name;
-    return `
-      <div class="rep-card ${isActive ? 'active-rep' : ''}" onclick="selectRep('${rep.name}')">
-        <div class="rep-card-name" style="color:${rep.color}">${rep.name}</div>
-        <div class="rep-card-total">${t.length} Total Records</div>
-        <div style="position:absolute; bottom:0; left:0; right:0; height:3px; background:${rep.color}"></div>
-      </div>`;
-  }).join('');
-}
-
-function selectRep(name) {
-  currentRep = currentRep === name ? 'all' : name;
-  document.getElementById('view-title').innerText = currentRep === 'all' ? "All Sales Reps" : currentRep;
-  refreshUI();
-}
-
-function updateStats() {
-  const data = currentRep === 'all' ? allData : allData.filter(r => (r['Name']||'').trim().toLowerCase() === currentRep.toLowerCase());
-  const counters = {won:0, new:0, quote:0, lost:0};
-  
-  data.forEach(r => {
-    const s = (r['Client Status'] || '').toLowerCase();
-    if(s.includes('won')) counters.won++;
-    else if(s.includes('new')) counters.new++;
-    else if(s.includes('quote')) counters.quote++;
-    else if(s.includes('lost')) counters.lost++;
+  // Update Big Counters
+  const counts = {new:0, old:0};
+  filtered.forEach(r => {
+    const s = (r['Client Status']||'').toLowerCase();
+    if(s.includes('new')) counts.new++;
+    else if(s.includes('old')) counts.old++;
   });
-  
-  document.getElementById('count-won').innerText = counters.won;
-  document.getElementById('count-new').innerText = counters.new;
-  document.getElementById('count-quote').innerText = counters.quote;
-  document.getElementById('count-lost').innerText = counters.lost;
-}
+  document.getElementById('c-new').innerText = counts.new;
+  document.getElementById('c-old').innerText = counts.old;
 
-function toggleSlice(status) {
-  const index = selectedStatuses.indexOf(status);
-  if (index > -1) selectedStatuses.splice(index, 1);
-  else selectedStatuses.push(status);
-  
-  document.querySelectorAll('.stat-card').forEach(card => {
-     const cardStatus = card.id.replace('btn-', '');
-     if (selectedStatuses.includes(cardStatus)) card.classList.add('active-slice');
-     else card.classList.remove('active-slice');
-  });
-  renderTable();
-}
-
-function renderTable() {
-  let filtered = currentRep === 'all' ? allData : allData.filter(r => (r['Name']||'').trim().toLowerCase() === currentRep.toLowerCase());
-  
-  // Filter by status slices
-  if (selectedStatuses.length > 0) {
-    filtered = filtered.filter(r => {
-      const s = (r['Client Status'] || '').toLowerCase();
-      return selectedStatuses.some(status => s.includes(status.toLowerCase()));
-    });
-  }
+  // Status Filtering
+  filtered = filtered.filter(r => selStatus.some(s => (r['Client Status']||'').toLowerCase().includes(s.toLowerCase())));
 
   const tbody = document.getElementById('tbody');
   tbody.innerHTML = filtered.map(r => {
     const s = r['Client Status'] || 'New';
+    const tagClass = s.toLowerCase().includes('new') ? 'tag-new' : 'tag-old';
     
-    // Date Formatting
-    const dateStr = r['Timestamp'] || '';
-    let displayDate = '-';
-    if(dateStr) {
-        const d = new Date(dateStr);
-        displayDate = isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
-    }
-    
-    // Badge Logic
-    let badgeClass = 'badge-new';
-    if(s.toLowerCase().includes('won')) badgeClass = 'badge-won';
-    else if(s.toLowerCase().includes('quote')) badgeClass = 'badge-quote';
-    else if(s.toLowerCase().includes('lost')) badgeClass = 'badge-lost';
-
-    return `
-      <tr>
-        <td style="color: var(--accent3); font-weight: 500;">${displayDate}</td>
-        <td style="font-weight:700; color: var(--text);">${r['Account Name'] || '-'}</td>
-        <td>${r['Location'] || '-'}</td>
-        <td>${r['Name'] || '-'}</td>
-        <td style="max-width: 250px;"><small style="color:var(--muted)">${r['Brands'] || '-'}</small></td>
-        <td><span class="status-badge ${badgeClass}">${s}</span></td>
-      </tr>`;
+    return `<tr>
+      <td>${r['Timestamp'] ? new Date(r['Timestamp']).toLocaleDateString('en-GB') : '-'}</td>
+      <td style="font-weight:700;">${r['Account Name'] || '-'}</td>
+      <td>${r['Location'] || '-'}</td>
+      <td>${r['Name'] || '-'}</td>
+      <td><small>${r['Brands'] || '-'}</small></td>
+      <td><span class="status-tag ${tagClass}">${s}</span></td>
+    </tr>`;
   }).join('');
 }
-</script>
 
+function filterRep(name) { selRep = name; render(); }
+
+function toggleStatus(s) {
+  const i = selStatus.indexOf(s);
+  if(i > -1) selStatus.splice(i, 1); else selStatus.push(s);
+  document.getElementById('f-'+s.toLowerCase()).classList.toggle('active-filter');
+  render();
+}
+
+window.onload = loadData;
+</script>
 </body>
 </html>
