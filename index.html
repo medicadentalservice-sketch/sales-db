@@ -76,6 +76,7 @@ a{color:var(--accent);text-decoration:none;}
 .metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);opacity:.4;}
 .metric-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
 .metric-value{font-size:22px;font-weight:600;font-family:var(--mono);color:var(--text);letter-spacing:-.5px;}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:3px;}
 
 /* Tabs */
 .tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;}
@@ -84,34 +85,43 @@ a{color:var(--accent);text-decoration:none;}
 
 /* Table card */
 .table-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.table-toolbar{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.filter-count{font-size:12px;color:var(--text2);font-family:var(--mono);}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:12px;}
-thead th{padding:9px 10px;text-align:left;font-weight:500;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);white-space:nowrap;}
+thead th{padding:9px 10px;text-align:left;font-weight:500;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top;}
+thead th .col-head{display:block;margin-bottom:5px;}
+thead th input,thead th select{font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);}
 tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
 tbody tr:hover{background:var(--bg3);}
 tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 
 /* Badges */
 .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;font-family:var(--mono);}
+.b-open{background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.2);}
+.b-won{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2);}
+.b-lost{background:rgba(231,76,60,.1);color:var(--red);border:1px solid rgba(231,76,60,.2);}
 .b-follow{background:rgba(52,152,219,.1);color:var(--blue);border:1px solid rgba(52,152,219,.2);}
 
-/* Buttons */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;border:1px solid var(--border);background:transparent;color:var(--text);transition:all .15s;cursor:pointer;}
-.btn:hover{background:var(--bg3);border-color:var(--border2);}
-.btn-primary{background:var(--accent);color:#000;border-color:var(--accent);}
-.btn-primary:hover{background:var(--accent2);border-color:var(--accent2);}
-.btn-sm{padding:4px 10px;font-size:11px;}
-.btn-ghost{border:none;background:transparent;color:var(--text2);padding:4px 8px;}
+/* Form */
+.form-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;}
+.form-title{font-size:15px;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-full{grid-column:1/-1;}
+.form-label{font-size:11px;color:var(--text2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px;font-weight:500;}
+
+/* Charts */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:4px;}
+.chart-wrap{position:relative;width:100%;}
 
 /* Scrollbar */
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
-@media(max-width:600px){
-  .main{padding:12px;}
-  .topbar{padding:0 12px;}
-}
+@media(max-width:700px){.charts-grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
@@ -185,12 +195,43 @@ const USERS = [
   { id:5, name:"Munadel Yassine", role:"salesman",   pass:"4321", initials:"MY" },
 ];
 
-let leads = [];
-let currentUser = null;
-let activeTab = "leads";
+const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
+const STATUSES = ["Open","Follow Up","Closed Won","Closed Lost"];
 
 // ─────────────────────────────────────────
-// LOGIN LOGIC
+// STATE
+// ─────────────────────────────────────────
+let leads = [];
+let currentUser = null;
+let editingId = null;
+let activeTab = "leads";
+let chartSel = { city:null, product:null, brand:null, status:null };
+let filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:"", nextAction:"", status:"", salesman:"" };
+
+// ─────────────────────────────────────────
+// HELPERS & NORMALIZATION
+// ─────────────────────────────────────────
+function normalizeCity(raw) {
+  if (!raw) return "Other";
+  const c = raw.toLowerCase().trim();
+  if (c.includes("riyadh") || c.includes("الرياض")) return "Riyadh";
+  if (c.includes("jeddah") || c.includes("جدة")) return "Jeddah";
+  if (c.includes("dammam") || c.includes("الدمام")) return "Dammam";
+  return "Other";
+}
+
+function normalizeProduct(raw) {
+  if (!raw) return "Other";
+  const p = raw.toLowerCase();
+  if (p.includes("planmeca")) return "Planmeca";
+  if (p.includes("bisco")) return "Bisco";
+  if (p.includes("cj optic")) return "CJ Optic";
+  if (p.includes("mectron") || p.includes("piezo")) return "Mectron";
+  return "Other";
+}
+
+// ─────────────────────────────────────────
+// LOGIN
 // ─────────────────────────────────────────
 function initLogin() {
   const sel = document.getElementById("l-user");
@@ -200,10 +241,6 @@ function initLogin() {
     opt.textContent = u.name;
     sel.appendChild(opt);
   });
-  
-  // PASSWORD HINTS REMOVED FOR SECURITY
-  const hint = document.getElementById("login-hint");
-  hint.innerHTML = ""; 
 }
 
 function doLogin() {
@@ -211,22 +248,14 @@ function doLogin() {
   const pass = document.getElementById("l-pass").value;
   const user = USERS.find(u => u.id === uid && u.pass === pass);
   const errEl = document.getElementById("login-error");
+  if (!user) { errEl.style.display = "block"; return; }
   
-  if (!user) { 
-    errEl.style.display = "block"; 
-    return; 
-  }
-  
-  errEl.style.display = "none";
   currentUser = user;
-  
   document.getElementById("top-avatar").textContent = user.initials;
   document.getElementById("top-name").textContent = user.name;
   document.getElementById("top-role").textContent = user.role.toUpperCase();
-  
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app-screen").classList.add("visible");
-  
   loadFromSheet();
 }
 
@@ -234,83 +263,113 @@ function signOut() {
   currentUser = null;
   document.getElementById("app-screen").classList.remove("visible");
   document.getElementById("login-screen").style.display = "flex";
-  document.getElementById("l-pass").value = "";
 }
 
 // ─────────────────────────────────────────
-// APP LOGIC
+// DATA LOADING
 // ─────────────────────────────────────────
 async function loadFromSheet() {
   const dot = document.getElementById("sync-dot");
   const lbl = document.getElementById("sync-label");
-  dot.classList.add("syncing");
+  dot.className = "sync-dot syncing";
   lbl.textContent = "Syncing...";
   
   try {
     const res = await fetch(SCRIPT_URL + "?action=get");
     const raw = await res.json();
-    leads = raw; 
-    lbl.textContent = "Synced " + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    leads = raw.map((r, i) => ({
+      id: 2000 + i,
+      name: (r.name || r["Account Name"] || "").trim(),
+      location: (r.location || r.Location || "").trim(),
+      salesman: r.salesman || r.Name || "",
+      mainProduct: (r.mainProduct || r["The main product of the visit"] || "").trim(),
+      status: (r.nextAction || "").toLowerCase().includes("won") ? "Closed Won" : "Open",
+      brands: (r.brands || "").split(",").map(s => s.trim()).filter(Boolean),
+      clientStatus: r.clientStatus || "Old",
+      nextAction: r.nextAction || "",
+      contact: r.contact || "",
+      value: Number(r.value || 0)
+    }));
+    lbl.textContent = "Synced " + new Date().toLocaleTimeString();
   } catch(e) {
     lbl.textContent = "Offline Mode";
   } finally {
-    dot.classList.remove("syncing");
+    dot.className = "sync-dot";
     renderApp();
   }
 }
 
+// ─────────────────────────────────────────
+// RENDERING
+// ─────────────────────────────────────────
 function renderApp() {
-  renderMetrics();
-  renderTabBar();
-  renderTabContent();
-}
-
-function renderMetrics() {
   const myLeads = currentUser.role === "manager" ? leads : leads.filter(l => l.salesman === currentUser.name);
-  const total = myLeads.length;
-  const won = myLeads.filter(l => (l.nextAction || "").toLowerCase().includes("won")).length;
   
+  // Metrics
+  const won = myLeads.filter(l => l.status === "Closed Won").length;
   document.getElementById("metrics-row").innerHTML = `
-    <div class="metric-card"><div class="metric-label">Total Accounts</div><div class="metric-value">${total}</div></div>
-    <div class="metric-card"><div class="metric-label">Pipeline Won</div><div class="metric-value">${won}</div></div>
+    <div class="metric-card"><div class="metric-label">Total Accounts</div><div class="metric-value">${myLeads.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Won Pipeline</div><div class="metric-value">${won}</div></div>
+    <div class="metric-card"><div class="metric-label">New Clients</div><div class="metric-value">${myLeads.filter(l=>l.clientStatus==="New").length}</div></div>
   `;
-}
 
-function renderTabBar() {
-  const tabs = [
-    { id:"leads", label:"Accounts" },
-    { id:"charts", label:"Analytics" }
-  ];
-  document.getElementById("tab-bar").innerHTML = tabs.map(t =>
+  // Tabs
+  const tabs = [{id:"leads", label:"Accounts"}, {id:"charts", label:"Analytics"}];
+  if(currentUser.role==="manager") tabs.push({id:"team", label:"Team"});
+  document.getElementById("tab-bar").innerHTML = tabs.map(t => 
     `<button class="tab-btn ${activeTab===t.id?"active":""}" onclick="switchTab('${t.id}')">${t.label}</button>`
   ).join("");
+
+  renderTabContent(myLeads);
 }
 
 function switchTab(t) { activeTab = t; renderApp(); }
 
-function renderTabContent() {
+function renderTabContent(data) {
   const el = document.getElementById("tab-content");
   if (activeTab === "leads") {
-    const myLeads = currentUser.role === "manager" ? leads : leads.filter(l => l.salesman === currentUser.name);
-    let html = `<div class="table-card"><div class="table-wrap"><table><thead><tr>
-      <th>Account</th><th>Location</th><th>Product</th><th>Status</th><th>By</th>
-    </tr></thead><tbody>`;
-    
-    myLeads.forEach(l => {
-      html += `<tr>
-        <td>${l.name || l["Account Name"] || "-"}</td>
-        <td>${l.location || l.Location || "-"}</td>
-        <td>${l.mainProduct || l["The main product of the visit"] || "-"}</td>
-        <td><span class="badge b-follow">${l.nextAction || "Open"}</span></td>
-        <td>${l.salesman || "-"}</td>
-      </tr>`;
-    });
-    
-    html += `</tbody></table></div></div>`;
-    el.innerHTML = html;
-  } else {
-    el.innerHTML = `<div class="metric-card" style="text-align:center;padding:40px;">Select Accounts tab to view data.</div>`;
+    el.innerHTML = `
+      <div class="table-card"><div class="table-wrap"><table>
+        <thead><tr><th>Account</th><th>Location</th><th>Product</th><th>Status</th><th>By</th></tr></thead>
+        <tbody>${data.map(l => `
+          <tr>
+            <td>${l.name}</td>
+            <td>${l.location}</td>
+            <td>${l.mainProduct}</td>
+            <td><span class="badge b-follow">${l.status}</span></td>
+            <td>${l.salesman}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table></div></div>`;
+  } else if (activeTab === "charts") {
+    el.innerHTML = `<div class="charts-grid">
+      <div class="chart-card"><div class="chart-title">By City</div><canvas id="c-city"></canvas></div>
+      <div class="chart-card"><div class="chart-title">By Status</div><canvas id="c-status"></canvas></div>
+    </div>`;
+    renderCharts(data);
+  } else if (activeTab === "team") {
+    el.innerHTML = `<div class="table-card"><div class="table-header" style="padding:15px; font-weight:600;">Team Performance</div>
+      <table><thead><tr><th>Salesman</th><th>Accounts</th><th>Won</th></tr></thead>
+      <tbody>${USERS.filter(u=>u.role==="salesman").map(u => {
+        const ul = leads.filter(l=>l.salesman === u.name);
+        return `<tr><td>${u.name}</td><td>${ul.length}</td><td>${ul.filter(l=>l.status==="Closed Won").length}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
   }
+}
+
+function renderCharts(data) {
+  const cities = {}; data.forEach(l => { const c = normalizeCity(l.location); cities[c] = (cities[c]||0)+1; });
+  new Chart(document.getElementById("c-city"), {
+    type: 'bar',
+    data: { labels: Object.keys(cities), datasets: [{ data: Object.values(cities), backgroundColor: '#3498db' }] },
+    options: { plugins: { legend: { display: false } } }
+  });
+
+  const stats = { "Open": data.filter(l=>l.status==="Open").length, "Won": data.filter(l=>l.status==="Closed Won").length };
+  new Chart(document.getElementById("c-status"), {
+    type: 'doughnut',
+    data: { labels: Object.keys(stats), datasets: [{ data: Object.values(stats), backgroundColor: ['#f0a500','#2ecc71'] }] }
+  });
 }
 
 initLogin();
