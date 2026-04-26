@@ -654,7 +654,7 @@ function renderLeadsTab() {
         ${isManager ? `<td><span class="sal-badge" title="${owner?owner.name:""}">${owner?owner.initials:"?"}</span></td>` : ""}
         <td class="td-nowrap">
           <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
-          ${isManager && !l.imported ? ` <button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Del</button>` : ""}
+          ${isManager ? ` <button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Del</button>` : ""}
         </td>
       </tr>`;
     });
