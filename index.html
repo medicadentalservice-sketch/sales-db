@@ -46,6 +46,7 @@ a{color:var(--accent);text-decoration:none;}
 .login-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:28px;}
 .login-field{margin-bottom:16px;}
 .login-field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
+.login-hint{font-size:11px;color:var(--text3);margin-top:20px;line-height:1.7;font-family:var(--mono);}
 .login-error{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;border-radius:var(--radius);padding:8px 12px;font-size:13px;margin-bottom:14px;display:none;}
 
 #app-screen{display:none;min-height:100vh;flex-direction:column;}
@@ -176,6 +177,7 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 </head>
 <body>
 
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">
@@ -196,10 +198,12 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
         <input type="password" id="l-pass" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"/>
       </div>
       <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Sign in</button>
+      <div class="login-hint" id="login-hint"></div>
     </div>
   </div>
 </div>
 
+<!-- APP -->
 <div id="app-screen">
   <div class="topbar">
     <div class="topbar-left">
@@ -238,11 +242,11 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwpIrq24zGnLPk1jxlBbyJzPtKy1mfJ4U_K9vZ3oayPD0ZZJUTrcvQ5u7mjUhZfjjy86g/exec";
 
 const USERS = [
-  { id:1, name:"Mohamed Agha",    role:"manager",    pass:"1243",   initials:"MA" },
-  { id:2, name:"Mohamed Hamdy",   role:"salesman",   pass:"2341",  initials:"MH" },
-  { id:3, name:"Mohamed Almech",  role:"salesman",   pass:"4123", initials:"ME" },
-  { id:4, name:"Yahya Aldaour",   role:"salesman",   pass:"3241",  initials:"YA" },
-  { id:5, name:"Munadel Yassine", role:"salesman",   pass:"4321",initials:"MY" },
+  { id:1, name:"Mohamed Agha",    role:"manager",   pass:"1243",   initials:"MA" },
+  { id:2, name:"Mohamed Hamdy",   role:"salesman",  pass:"2341",  initials:"MH" },
+  { id:3, name:"Mohamed Almech",  role:"salesman",  pass:"4123", initials:"ME" },
+  { id:4, name:"Yahya Aldaour",   role:"salesman",  pass:"3241",  initials:"YA" },
+  { id:5, name:"Munadel Yassine", role:"salesman",  pass:"4321",initials:"MY" },
 ];
 
 const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
@@ -328,8 +332,21 @@ let filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:""
 // ─────────────────────────────────────────
 function parseBrands(str) { return str ? str.split(",").map(s => s.trim()).filter(Boolean) : []; }
 function uidFromName(name) {
-  const n = (name || "").trim().toLowerCase();
-  const u = USERS.find(u => u.name.toLowerCase() === n || u.name.toLowerCase().includes(n.split(" ")[0]));
+  if (!name || !name.trim()) return 2;
+  const n = name.trim().toLowerCase();
+  // Try exact match first
+  let u = USERS.find(u => u.name.toLowerCase() === n);
+  if (u) return u.id;
+  // Try first name match
+  const first = n.split(" ")[0];
+  // For "Mohamed X" names, match on second word to avoid all mapping to first Mohamed
+  const parts = n.split(" ");
+  if (parts.length > 1) {
+    const second = parts[1];
+    u = USERS.find(u => u.name.toLowerCase().includes(second));
+    if (u) return u.id;
+  }
+  u = USERS.find(u => u.name.toLowerCase().includes(first));
   return u ? u.id : 2;
 }
 function inferStatus(next) {
@@ -489,13 +506,14 @@ function loadFallbackData() {
 // ─────────────────────────────────────────
 function initLogin() {
   const sel = document.getElementById("l-user");
-  if (!sel) return;
   USERS.forEach(u => {
     const opt = document.createElement("option");
     opt.value = u.id;
     opt.textContent = u.name + (u.role === "manager" ? " (Manager)" : "");
     sel.appendChild(opt);
   });
+  const hint = document.getElementById("login-hint");
+  hint.textContent = "Contact your manager if you forgot your password.";
 }
 
 function doLogin() {
@@ -583,7 +601,7 @@ function renderLeadsTab() {
   const filtered = applyFilters();
   const uniqueCities = [...new Set(myLeads.map(l => normalizeCity(l.location)).filter(Boolean))].sort();
   const uniqueProducts = [...new Set(myLeads.map(l => normalizeProduct(l.mainProduct)).filter(x => x && x !== "Other"))].sort();
-  const salesmen = USERS.filter(u => u.role === "salesman");
+  const salesmen = USERS.filter(u => u.role === "salesman" || u.id === 1);
   const activeFilters = Object.values(filters).filter(v => v !== "").length;
 
   let html = `<div class="table-card">`;
@@ -683,8 +701,10 @@ function renderAddTab() {
 }
 
 // ─────────────────────────────────────────
-// CHARTS TAB
+// CHARTS TAB — cross-filtering
 // ─────────────────────────────────────────
+
+// Chart selection state — null = no filter active for that dimension
 let chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
 let chartInstances = {};
 
@@ -733,6 +753,7 @@ function refreshAllCharts() {
   const clrs = ["#3498db","#2ecc71","#f0a500","#e74c3c","#9b59b6","#1abc9c","#e67e22","#34495e","#e91e63","#00bcd4","#8bc34a","#ff5722"];
   const dimAlpha = (dim, label, base) => chartSel[dim] === null ? base : chartSel[dim] === label ? base : base + "55";
 
+  // City
   if (chartInstances.city) {
     const cc = getCityCounts(d);
     const all = getCityCounts(getMyLeads());
@@ -744,6 +765,7 @@ function refreshAllCharts() {
     chartInstances.city.update();
   }
 
+  // Product
   if (chartInstances.prod) {
     const pc = getProductCounts(d);
     const allP = getProductCounts(getMyLeads());
@@ -755,12 +777,14 @@ function refreshAllCharts() {
     chartInstances.prod.update();
   }
 
+  // Brand
   if (chartInstances.brand) {
     chartInstances.brand.data.datasets[0].data = BRANDS.map(b => d.filter(l=>(l.brands||[]).includes(b)).length);
     chartInstances.brand.data.datasets[0].backgroundColor = BRANDS.map(b => dimAlpha("brand", b, "#f0a500"));
     chartInstances.brand.update();
   }
 
+  // Status
   if (chartInstances.status) {
     chartInstances.status.data.datasets[0].data = STATUSES.map(s => d.filter(l=>l.status===s).length);
     const statusClrs = ["#f0a500","#3498db","#2ecc71","#e74c3c"];
@@ -768,6 +792,7 @@ function refreshAllCharts() {
     chartInstances.status.update();
   }
 
+  // New/Old
   if (chartInstances.newold) {
     const newCount = d.filter(l=>l.clientStatus==="New").length;
     const oldCount = d.filter(l=>l.clientStatus==="Old").length;
@@ -779,6 +804,7 @@ function refreshAllCharts() {
     chartInstances.newold.update();
   }
 
+  // Source
   if (chartInstances.source) {
     const srcClrs = ["#3498db","#9b59b6","#1abc9c","#34495e"];
     chartInstances.source.data.datasets[0].data = SOURCES.map(s=>d.filter(l=>l.source===s).length);
@@ -796,30 +822,33 @@ function renderChartsTab() {
   chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
   return `
   <div id="chart-filter-bar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;"></div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Click any bar or slice to filter all charts. Click again to deselect.</div>
   <div class="charts-grid">
     <div class="chart-card" style="grid-column:1/-1;">
       <div class="chart-title">Accounts by city</div>
-      <div class="chart-wrap" style="height:${cityH}px;"><canvas id="chart-city"></canvas></div>
+      <div class="chart-sub">Arabic & English entries grouped automatically</div>
+      <div class="chart-wrap" style="height:${cityH}px;"><canvas id="chart-city" role="img" aria-label="Horizontal bar chart of accounts by city">Accounts by city.</canvas></div>
     </div>
     <div class="chart-card" style="grid-column:1/-1;">
       <div class="chart-title">Main product of visit</div>
-      <div class="chart-wrap" style="height:${prodH}px;"><canvas id="chart-prod"></canvas></div>
+      <div class="chart-sub">Similar products grouped — "Romexis" → Planmeca, "Piezo" → Mectron</div>
+      <div class="chart-wrap" style="height:${prodH}px;"><canvas id="chart-prod" role="img" aria-label="Horizontal bar chart of main products">Main products.</canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-title">Volume per brand</div>
-      <div class="chart-wrap" style="height:${BRANDS.length*36+50}px;"><canvas id="chart-brand"></canvas></div>
+      <div class="chart-wrap" style="height:${BRANDS.length*36+50}px;"><canvas id="chart-brand" role="img" aria-label="Horizontal bar chart of brand volume">Brand volume.</canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-title">Pipeline by status</div>
-      <div class="chart-wrap" style="height:220px;"><canvas id="chart-status"></canvas></div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="chart-status" role="img" aria-label="Bar chart of pipeline status">Pipeline status.</canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-title">New vs old clients</div>
-      <div class="chart-wrap" style="height:220px;"><canvas id="chart-newold"></canvas></div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="chart-newold" role="img" aria-label="Donut chart of new vs old clients">New vs old clients.</canvas></div>
     </div>
     <div class="chart-card">
       <div class="chart-title">Visits by source</div>
-      <div class="chart-wrap" style="height:220px;"><canvas id="chart-source"></canvas></div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="chart-source" role="img" aria-label="Donut chart of visits by source">Visits by source.</canvas></div>
     </div>
   </div>`;
 }
@@ -834,54 +863,86 @@ function renderCharts() {
   const barOpts = (indexAxis, onClickFn) => ({
     indexAxis,
     responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ display:false } },
+    plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed[indexAxis==="y"?"x":"y"]} accounts` } } },
     scales:{
       x:{ beginAtZero:true, ticks:{ color:"#5a6070", font:{size:11} }, grid:{ color:"rgba(255,255,255,.04)" } },
       y:{ ticks:{ color:"#5a6070", font:{size:11} }, grid:{ display:false } }
     },
-    onClick: onClickFn
+    onClick: onClickFn,
+    onHover: (e, el) => { e.native.target.style.cursor = el.length ? "pointer" : "default"; }
   });
 
   const doughnutOpts = (onClickFn) => ({
     responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ position:"bottom", labels:{ color:"#9aa0b0", font:{size:12} } } },
-    onClick: onClickFn
+    plugins:{ legend:{ position:"bottom", labels:{ color:"#9aa0b0", font:{size:12}, padding:16 } }, tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${ctx.parsed} accounts` } } },
+    onClick: onClickFn,
+    onHover: (e, el) => { e.native.target.style.cursor = el.length ? "pointer" : "default"; }
   });
 
+  // City chart
   chartInstances.city = new Chart(document.getElementById("chart-city"), {
     type:"bar",
     data:{ labels:cc.map(x=>x[0]), datasets:[{ data:cc.map(x=>x[1]), backgroundColor:cc.map((_,i)=>clrs[i%clrs.length]), borderRadius:4 }] },
-    options: barOpts("y", (evt, els) => { if (els.length) toggleChartSel("city", chartInstances.city.data.labels[els[0].index]); })
+    options: barOpts("y", (evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.city.data.labels[els[0].index];
+      toggleChartSel("city", label);
+    })
   });
 
+  // Product chart
   chartInstances.prod = new Chart(document.getElementById("chart-prod"), {
     type:"bar",
     data:{ labels:pc.map(x=>x[0]), datasets:[{ data:pc.map(x=>x[1]), backgroundColor:pc.map((_,i)=>clrs[i%clrs.length]), borderRadius:4 }] },
-    options: barOpts("y", (evt, els) => { if (els.length) toggleChartSel("product", chartInstances.prod.data.labels[els[0].index]); })
+    options: barOpts("y", (evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.prod.data.labels[els[0].index];
+      toggleChartSel("product", label);
+    })
   });
 
+  // Brand chart
   chartInstances.brand = new Chart(document.getElementById("chart-brand"), {
     type:"bar",
     data:{ labels:BRANDS, datasets:[{ data:BRANDS.map(b=>d.filter(l=>(l.brands||[]).includes(b)).length), backgroundColor:"#f0a500", borderRadius:4 }] },
-    options: barOpts("y", (evt, els) => { if (els.length) toggleChartSel("brand", chartInstances.brand.data.labels[els[0].index]); })
+    options: barOpts("y", (evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.brand.data.labels[els[0].index];
+      toggleChartSel("brand", label);
+    })
   });
 
+  // Status chart
   chartInstances.status = new Chart(document.getElementById("chart-status"), {
     type:"bar",
     data:{ labels:STATUSES, datasets:[{ data:STATUSES.map(s=>d.filter(l=>l.status===s).length), backgroundColor:["#f0a500","#3498db","#2ecc71","#e74c3c"], borderRadius:4 }] },
-    options: barOpts("x", (evt, els) => { if (els.length) toggleChartSel("status", chartInstances.status.data.labels[els[0].index]); })
+    options: barOpts("x", (evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.status.data.labels[els[0].index];
+      toggleChartSel("status", label);
+    })
   });
 
+  // New/Old chart
   chartInstances.newold = new Chart(document.getElementById("chart-newold"), {
     type:"doughnut",
     data:{ labels:["New","Old"], datasets:[{ data:[d.filter(l=>l.clientStatus==="New").length, d.filter(l=>l.clientStatus==="Old").length], backgroundColor:["#2ecc71","#34495e"], borderWidth:0 }] },
-    options: doughnutOpts((evt, els) => { if (els.length) toggleChartSel("clientStatus", chartInstances.newold.data.labels[els[0].index]); })
+    options: doughnutOpts((evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.newold.data.labels[els[0].index];
+      toggleChartSel("clientStatus", label);
+    })
   });
 
+  // Source chart
   chartInstances.source = new Chart(document.getElementById("chart-source"), {
     type:"doughnut",
     data:{ labels:SOURCES, datasets:[{ data:SOURCES.map(s=>d.filter(l=>l.source===s).length), backgroundColor:["#3498db","#9b59b6","#1abc9c","#34495e"], borderWidth:0 }] },
-    options: doughnutOpts((evt, els) => { if (els.length) toggleChartSel("source", chartInstances.source.data.labels[els[0].index]); })
+    options: doughnutOpts((evt, els) => {
+      if (!els.length) return;
+      const label = chartInstances.source.data.labels[els[0].index];
+      toggleChartSel("source", label);
+    })
   });
 }
 
@@ -889,6 +950,7 @@ function renderCharts() {
 // TEAM TAB
 // ─────────────────────────────────────────
 function renderTeamTab() {
+  const salesmen = USERS.filter(u => u.role === "salesman" || u.id === currentUser.id);
   let html = `<div class="team-card"><div class="team-header">Team Performance</div>
   <div class="table-wrap"><table><thead><tr>
     <th style="width:30%;"><span class="col-head">Salesman</span></th>
@@ -903,14 +965,14 @@ function renderTeamTab() {
     const m = metrics(ul);
     html += `<tr>
       <td><div style="display:flex;align-items:center;gap:10px;">
-        <div class="sal-badge">${u.initials}</div>
+        <div class="sal-badge" style="width:30px;height:30px;font-size:11px;">${u.initials}</div>
         <div><div style="font-weight:500;">${u.name}</div><div style="font-size:11px;color:var(--text3);">${ul.length} total</div></div>
       </div></td>
-      <td style="font-family:var(--mono);">${m.total}</td>
-      <td style="font-family:var(--mono);">${m.won}</td>
+      <td style="font-family:var(--mono);font-size:13px;">${m.total}</td>
+      <td style="font-family:var(--mono);font-size:13px;">${m.won}</td>
       <td><span class="badge ${m.rate>=50?"b-won":m.rate>=30?"b-follow":"b-lost"}">${m.rate}%</span></td>
-      <td style="font-family:var(--mono);">${m.rev.toLocaleString()}</td>
-      <td style="font-family:var(--mono);">${m.open}</td>
+      <td style="font-family:var(--mono);font-size:13px;">${m.rev.toLocaleString()}</td>
+      <td style="font-family:var(--mono);font-size:13px;">${m.open}</td>
     </tr>`;
   });
   html += `</tbody></table></div></div>`;
