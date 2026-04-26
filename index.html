@@ -1,378 +1,636 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Sales Portal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engineer Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#0d0f12;
-  --bg2:#13161b;
-  --bg3:#1a1e25;
-  --bg4:#21262f;
-  --border:#2a2f3a;
-  --border2:#363d4a;
-  --text:#e8eaf0;
-  --text2:#9aa0b0;
-  --text3:#5a6070;
-  --accent:#f0a500;
-  --accent2:#e8951a;
-  --green:#2ecc71;
-  --red:#e74c3c;
-  --blue:#3498db;
-  --purple:#9b59b6;
-  --radius:6px;
-  --font:'IBM Plex Sans',sans-serif;
-  --mono:'IBM Plex Mono',monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;}
-input,select,textarea{font-family:var(--font);font-size:13px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:7px 10px;width:100%;outline:none;transition:border .15s;}
-input:focus,select:focus{border-color:var(--accent);}
-button{font-family:var(--font);cursor:pointer;}
-a{color:var(--accent);text-decoration:none;}
+  :root {
+    --bg: #0a0c10; --surface: #111318; --surface2: #181c23; --border: #ffffff0f;
+    --accent: #00e5a0; --text: #f0f2f7; --muted: #6b7280;
+    --closed: #00e5a0; --open: #4d9fff; --inprogress: #f0b429; --waiting: #ff6b35;
+    --unassigned: #ff00ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Mono',monospace; background:var(--bg); color:var(--text); min-height:100vh; }
+  body::before { content:''; position:fixed; inset:0; background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px); background-size:40px 40px; pointer-events:none; z-index:0; }
+  .container { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:40px 24px; }
+  header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:32px; flex-wrap:wrap; gap:20px; border-bottom:1px solid var(--border); padding-bottom:20px; }
+  .logo-area h1 { font-family:'Syne',sans-serif; font-size:24px; font-weight:800; }
+  .logo-area h1 span { color:var(--accent); }
 
-/* Layout */
-#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:var(--bg);position:relative;overflow:hidden;}
-#login-screen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 50%,rgba(240,165,0,.06) 0%,transparent 70%);}
-.login-box{width:100%;max-width:380px;position:relative;z-index:1;}
-.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px;}
-.login-logo-mark{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;color:#000;}
-.login-title{font-size:22px;font-weight:600;letter-spacing:-.3px;}
-.login-sub{font-size:13px;color:var(--text2);margin-top:2px;}
-.login-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:28px;}
-.login-field{margin-bottom:16px;}
-.login-field label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
-.login-hint{font-size:11px;color:var(--text3);margin-top:20px;line-height:1.7;font-family:var(--mono);display:none;}
-.login-error{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:#e74c3c;border-radius:var(--radius);padding:8px 12px;font-size:13px;margin-bottom:14px;display:none;}
+  /* PIN SCREEN */
+  #pin-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:32px; position:fixed; inset:0; z-index:100; background:var(--bg); }
+  .pin-title { font-family:'Syne',sans-serif; font-size:28px; font-weight:800; text-align:center; }
+  .pin-title span { color:var(--accent); }
+  .pin-dots { display:flex; gap:16px; }
+  .pin-dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--muted); transition:all .2s; }
+  .pin-dot.filled { background:var(--accent); border-color:var(--accent); }
+  .pin-dot.error { background:#ff4444; border-color:#ff4444; animation:shake .3s ease; }
+  @keyframes shake { 0%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}100%{transform:translateX(0)} }
+  .pin-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .pin-key { width:72px; height:72px; border-radius:50%; border:1px solid var(--border); background:var(--surface); color:var(--text); font-family:'Syne',sans-serif; font-size:20px; font-weight:800; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; }
+  .pin-key:hover { background:var(--surface2); border-color:var(--accent); transform:scale(1.05); }
+  .pin-key:active { transform:scale(0.95); }
+  .pin-key.del { font-size:16px; color:var(--muted); }
+  .pin-key.zero { grid-column:2; }
+  .pin-error { color:#ff4444; font-size:12px; height:16px; text-align:center; }
 
-#app-screen{display:none;min-height:100vh;flex-direction:column;}
-#app-screen.visible{display:flex;}
+  /* MAIN */
+  #loading { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:20px; }
+  .spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  #content { display:none; animation:fadeIn .4s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)} }
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+  @media(max-width:700px){ .stats-grid { grid-template-columns:repeat(2,1fr); } }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; position:relative; cursor:pointer; transition:all 0.2s; opacity:0.5; }
+  .stat-card.active-slice { border:1px solid white; opacity:1; transform:scale(1.02); }
+  .stat-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:3px; }
+  .stat-card.open::after { background:var(--open); }
+  .stat-card.inprogress::after { background:var(--inprogress); }
+  .stat-card.waiting::after { background:var(--waiting); }
+  .stat-card.closed::after { background:var(--closed); }
+  .stat-value { font-family:'Syne',sans-serif; font-size:42px; font-weight:800; line-height:1; margin-top:10px; }
+  .table-section { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:28px; }
+  .table-header { padding:16px 20px; background:var(--surface2); border-bottom:1px solid var(--border); font-family:'Syne',sans-serif; font-weight:800; font-size:14px; }
+  .table-scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:12px; min-width:900px; }
+  th { padding:12px 16px; text-align:left; background:var(--surface2); color:var(--muted); text-transform:uppercase; font-size:10px; white-space:nowrap; }
+  td { padding:10px 16px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .status-select { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; outline:none; width:100%; }
+  .spare-wrap { display:flex; flex-direction:column; gap:4px; }
+  .spare-input { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:4px 8px; font-family:'DM Mono',monospace; font-size:11px; outline:none; width:130px; }
+  .spare-input::placeholder { color:var(--muted); }
+  .save-btn { background:var(--waiting); color:#000; border:none; border-radius:6px; padding:3px 8px; font-family:'Syne',sans-serif; font-size:10px; font-weight:800; cursor:pointer; }
+  .spare-text { color:var(--waiting); font-size:11px; }
+  .claim-btn { background:var(--unassigned); color:#000; border:none; border-radius:6px; padding:6px 14px; font-family:'Syne',sans-serif; font-size:11px; font-weight:800; cursor:pointer; transition:all .2s; animation:pulse 2s infinite; }
+  .claim-btn:hover { opacity:0.8; transform:scale(1.05); }
+  .claim-btn:disabled { opacity:0.4; cursor:not-allowed; animation:none; }
+  @keyframes pulse { 0%{opacity:1}50%{opacity:0.7}100%{opacity:1} }
+  .refresh-btn { background:var(--accent); border:none; color:#000; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; }
+  .add-btn { background:#4d9fff; border:none; color:#fff; padding:10px 20px; border-radius:8px; cursor:pointer; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; }
+  .logout-btn { background:transparent; border:1px solid var(--border); color:var(--muted); padding:10px 16px; border-radius:8px; cursor:pointer; font-family:'DM Mono',monospace; font-size:11px; }
+  .logout-btn:hover { border-color:#ff4444; color:#ff4444; }
+  .client-info { display:flex; flex-direction:column; gap:2px; }
+  .client-info .cname { font-weight:700; font-size:12px; }
+  .client-info .phone { color:#4d9fff; font-size:11px; text-decoration:none; }
+  .client-info .clocation { color:var(--muted); font-size:10px; }
+  .new-ticket-row { background:#ff00ff08; }
+  .type-badge { display:inline-flex; padding:2px 8px; border-radius:100px; font-size:9px; font-weight:700; }
+  .type-it { background:#4d9fff20; color:#4d9fff; border:1px solid #4d9fff40; }
+  .type-hw { background:#f0b42920; color:#f0b429; border:1px solid #f0b42940; }
+  #toast { position:fixed; bottom:30px; right:30px; color:#000; padding:12px 20px; border-radius:10px; font-family:'Syne',sans-serif; font-weight:800; font-size:13px; transform:translateY(100px); opacity:0; transition:all .3s; z-index:999; }
+  #toast.show { transform:translateY(0); opacity:1; }
 
-/* Topbar */
-.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-.topbar-left{display:flex;align-items:center;gap:14px;}
-.topbar-logo{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#000;flex-shrink:0;}
-.topbar-title{font-size:14px;font-weight:600;letter-spacing:-.2px;}
-.sync-indicator{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);font-family:var(--mono);}
-.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
-.sync-dot.syncing{background:var(--accent);animation:blink 1s infinite;}
-@keyframes blink{0%,100%{opacity:1;}50%{opacity:.2;}}
-.topbar-right{display:flex;align-items:center;gap:10px;}
-.user-pill{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:5px 12px 5px 6px;}
-.user-avatar{width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;}
-.user-name{font-size:12px;font-weight:500;}
-.user-role{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;}
+  /* CONFIRM DIALOG */
+  #confirm-overlay { display:none; position:fixed; inset:0; background:#000000aa; z-index:200; align-items:center; justify-content:center; }
+  #confirm-overlay.show { display:flex; }
+  .confirm-box { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; max-width:360px; width:90%; text-align:center; }
+  .confirm-box h3 { font-family:'Syne',sans-serif; font-size:18px; margin-bottom:12px; }
+  .confirm-box p { color:var(--muted); font-size:12px; margin-bottom:24px; }
+  .confirm-btns { display:flex; gap:12px; justify-content:center; }
+  .confirm-yes { background:var(--accent); color:#000; border:none; border-radius:8px; padding:10px 24px; font-family:'Syne',sans-serif; font-weight:800; cursor:pointer; }
+  .confirm-no { background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px 24px; font-family:'Syne',sans-serif; font-weight:800; cursor:pointer; }
 
-/* Main content */
-.main{flex:1;padding:20px;max-width:1400px;width:100%;margin:0 auto;}
+  /* ADD TICKET MODAL */
+  .modal-overlay { display:none; position:fixed; inset:0; background:#000000bb; z-index:200; align-items:center; justify-content:center; padding:20px; }
+  .modal-overlay.show { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; }
+  .modal h2 { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; margin-bottom:24px; color:#4d9fff; }
+  .form-group { margin-bottom:16px; }
+  .form-group label { display:block; font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:6px; letter-spacing:1px; }
+  .form-group input, .form-group select, .form-group textarea { width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:'DM Mono',monospace; font-size:12px; outline:none; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:#4d9fff; }
+  .form-group textarea { resize:vertical; min-height:80px; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-btns { display:flex; gap:12px; margin-top:24px; }
+  .modal-submit { background:#4d9fff; color:#fff; border:none; border-radius:8px; padding:12px 24px; font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; flex:1; }
+  .modal-submit:disabled { opacity:0.5; cursor:not-allowed; }
+  .modal-cancel { background:var(--surface2); color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:12px 24px; font-family:'Syne',sans-serif; font-weight:800; font-size:13px; cursor:pointer; }
 
-/* Metrics */
-.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
-.metric-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden;}
-.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);opacity:.4;}
-.metric-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
-.metric-value{font-size:22px;font-weight:600;font-family:var(--mono);color:var(--text);letter-spacing:-.5px;}
-.metric-sub{font-size:11px;color:var(--text3);margin-top:3px;}
-
-/* Tabs */
-.tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px;}
-.tab-btn{padding:7px 16px;border-radius:5px;font-size:13px;font-weight:500;border:none;background:transparent;color:var(--text2);transition:all .15s;cursor:pointer;}
-.tab-btn.active{background:var(--bg4);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3);}
-
-/* Table card */
-.table-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
-.table-toolbar{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
-.filter-count{font-size:12px;color:var(--text2);font-family:var(--mono);}
-.table-wrap{overflow-x:auto;}
-table{width:100%;border-collapse:collapse;font-size:12px;}
-thead th{padding:9px 10px;text-align:left;font-weight:500;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:top;}
-thead th .col-head{display:block;margin-bottom:5px;}
-thead th input,thead th select{font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);}
-tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
-tbody tr:hover{background:var(--bg3);}
-tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
-
-/* Badges */
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500;font-family:var(--mono);}
-.b-open{background:rgba(240,165,0,.12);color:var(--accent);border:1px solid rgba(240,165,0,.2);}
-.b-won{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2);}
-.b-lost{background:rgba(231,76,60,.1);color:var(--red);border:1px solid rgba(231,76,60,.2);}
-.b-follow{background:rgba(52,152,219,.1);color:var(--blue);border:1px solid rgba(52,152,219,.2);}
-
-/* Form */
-.form-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;}
-.form-title{font-size:15px;font-weight:600;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.form-full{grid-column:1/-1;}
-.form-label{font-size:11px;color:var(--text2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px;font-weight:500;}
-
-/* Charts */
-.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:4px;}
-.chart-wrap{position:relative;width:100%;}
-
-/* Scrollbar */
-::-webkit-scrollbar{width:5px;height:5px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
-
-@media(max-width:700px){.charts-grid{grid-template-columns:1fr;}}
+  /* STATUS TYPE SELECTOR — only for IT engineer */
+  .status-selector { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .status-option { background:var(--surface2); border:2px solid var(--border); border-radius:10px; padding:12px 8px; cursor:pointer; text-align:center; transition:all .2s; font-family:'Syne',sans-serif; font-weight:800; font-size:12px; }
+  .status-option:hover { border-color:#4d9fff; }
+  .status-option.sel-inprogress { border-color:var(--inprogress); background:#f0b42915; color:var(--inprogress); }
+  .status-option.sel-waiting { border-color:var(--waiting); background:#ff6b3515; color:var(--waiting); }
+  .status-option.sel-closed { border-color:var(--closed); background:#00e5a015; color:var(--closed); }
 </style>
 </head>
 <body>
 
-<div id="login-screen">
-  <div class="login-box">
-    <div class="login-logo">
-      <div class="login-logo-mark">S</div>
-      <div>
-        <div class="login-title">Sales Portal</div>
-        <div class="login-sub">Sign in to your account</div>
-      </div>
-    </div>
-    <div class="login-card">
-      <div class="login-error" id="login-error">Incorrect password. Please try again.</div>
-      <div class="login-field">
-        <label>Select your name</label>
-        <select id="l-user"></select>
-      </div>
-      <div class="login-field">
-        <label>Password</label>
-        <input type="password" id="l-pass" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()"/>
-      </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;" onclick="doLogin()">Sign in</button>
-      <div class="login-hint" id="login-hint"></div>
+<div id="pin-screen">
+  <div>
+    <div class="pin-title">Service <span>Tickets</span></div>
+    <div style="color:var(--muted);font-size:12px;text-align:center;margin-top:8px">Enter your PIN to access your dashboard</div>
+  </div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="dot-0"></div>
+    <div class="pin-dot" id="dot-1"></div>
+    <div class="pin-dot" id="dot-2"></div>
+    <div class="pin-dot" id="dot-3"></div>
+  </div>
+  <div class="pin-error" id="pin-error"></div>
+  <div class="pin-pad">
+    <button class="pin-key" onclick="pinPress('1')">1</button>
+    <button class="pin-key" onclick="pinPress('2')">2</button>
+    <button class="pin-key" onclick="pinPress('3')">3</button>
+    <button class="pin-key" onclick="pinPress('4')">4</button>
+    <button class="pin-key" onclick="pinPress('5')">5</button>
+    <button class="pin-key" onclick="pinPress('6')">6</button>
+    <button class="pin-key" onclick="pinPress('7')">7</button>
+    <button class="pin-key" onclick="pinPress('8')">8</button>
+    <button class="pin-key" onclick="pinPress('9')">9</button>
+    <button class="pin-key zero" onclick="pinPress('0')">0</button>
+    <button class="pin-key del" onclick="pinDelete()">⌫</button>
+  </div>
+</div>
+
+<div id="confirm-overlay">
+  <div class="confirm-box">
+    <h3 id="confirm-title">Confirm Status Change</h3>
+    <p id="confirm-msg">Are you sure?</p>
+    <div class="confirm-btns">
+      <button class="confirm-yes" onclick="confirmYes()">Yes, Change</button>
+      <button class="confirm-no" onclick="confirmNo()">Cancel</button>
     </div>
   </div>
 </div>
 
-<div id="app-screen">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div class="topbar-logo">S</div>
-      <div class="topbar-title">Sales Portal</div>
-      <div class="sync-indicator">
-        <div class="sync-dot" id="sync-dot"></div>
-        <span id="sync-label">Loading...</span>
-      </div>
-    </div>
-    <div class="topbar-right">
-      <button class="btn btn-sm" onclick="loadFromSheet()" title="Refresh from sheet">↻ Sync</button>
-      <div class="user-pill">
-        <div class="user-avatar" id="top-avatar"></div>
-        <div>
-          <div class="user-name" id="top-name"></div>
-          <div class="user-role" id="top-role"></div>
-        </div>
-      </div>
-      <button class="btn btn-sm btn-ghost" onclick="signOut()">Sign out</button>
-    </div>
-  </div>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">+ Add New Ticket</h2>
 
-  <div class="main">
-    <div class="metrics" id="metrics-row"></div>
-    <div class="tabs" id="tab-bar"></div>
-    <div id="tab-content"></div>
+    <div class="form-group" id="status-selector-group" style="display:none">
+      <label>Ticket Status</label>
+      <div class="status-selector">
+        <div class="status-option" id="sopt-inprogress" onclick="selectTicketStatus('In Progress')">🔄 In Progress</div>
+        <div class="status-option" id="sopt-waiting" onclick="selectTicketStatus('Waiting')">⏳ Waiting Parts</div>
+        <div class="status-option" id="sopt-closed" onclick="selectTicketStatus('Closed')">✅ Closed</div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Clinic / Account Name *</label>
+        <input type="text" id="f-clinic" placeholder="e.g. Nahdi Care Clinic"/>
+      </div>
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" id="f-phone" placeholder="e.g. 0501234567"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Device Model</label>
+        <input type="text" id="f-device" placeholder="e.g. Romexis SW"/>
+      </div>
+      <div class="form-group">
+        <label>Location</label>
+        <input type="text" id="f-location" placeholder="e.g. Riyadh"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Problem Description *</label>
+      <textarea id="f-desc" placeholder="Describe the issue..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-submit" id="submit-btn" onclick="submitTicket()">➕ Add Ticket</button>
+    </div>
   </div>
 </div>
+
+<div class="container" id="main" style="display:none">
+  <header>
+    <div class="logo-area">
+      <h1 id="eng-title">My <span>Dashboard</span></h1>
+      <p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-top:5px;">Engineer View</p>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <button class="add-btn" onclick="openModal()">+ Add Ticket</button>
+      <button class="refresh-btn" onclick="loadData()" id="rbtn">↻ Refresh</button>
+      <button class="logout-btn" onclick="logout()">Sign Out</button>
+    </div>
+  </header>
+
+  <div id="loading"><div class="spinner"></div><p>Loading your tickets...</p></div>
+
+  <div id="content">
+    <div class="stats-grid">
+      <div class="stat-card open active-slice" id="btn-New" onclick="toggleSlice('New')">
+        <small style="color:var(--muted)">NEW</small>
+        <div class="stat-value" id="count-open">0</div>
+      </div>
+      <div class="stat-card inprogress active-slice" id="btn-In Progress" onclick="toggleSlice('In Progress')">
+        <small style="color:var(--muted)">IN PROGRESS</small>
+        <div class="stat-value" id="count-inprogress">0</div>
+      </div>
+      <div class="stat-card waiting active-slice" id="btn-Waiting" onclick="toggleSlice('Waiting')">
+        <small style="color:var(--muted)">WAITING PARTS</small>
+        <div class="stat-value" id="count-waiting">0</div>
+      </div>
+      <div class="stat-card closed active-slice" id="btn-Closed" onclick="toggleSlice('Closed')">
+        <small style="color:var(--muted)">CLOSED</small>
+        <div class="stat-value" id="count-closed">0</div>
+      </div>
+    </div>
+
+    <div class="table-section" id="new-tickets-section">
+      <div class="table-header" style="color:var(--unassigned)">⚡ Available New Tickets — Tap to Claim</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Clinic / Account</th><th>Contact & Phone</th><th>Description</th><th>Action</th></tr>
+          </thead>
+          <tbody id="tbody-new"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-header" style="color:var(--accent)">📋 My Assigned Tickets</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Type</th><th>Clinic / Account</th><th>Contact & Phone</th><th>Status</th><th>Spare Parts</th><th>Duration</th><th>Description</th></tr>
+          </thead>
+          <tbody id="tbody-mine"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
 
 <script>
-// ─────────────────────────────────────────
-// CONFIG
-// ─────────────────────────────────────────
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwpIrq24zGnLPk1jxlBbyJzPtKy1mfJ4U_K9vZ3oayPD0ZZJUTrcvQ5u7mjUhZfjjy86g/exec";
+const SCRIPT = "https://script.google.com/macros/s/AKfycbyd87MSxzZUXwhU6S4R2p-JHNtHew0aMvVYmN59FyRHbEV7wQYr0RvI4Fpyj887Y9N8/exec";
 
-const USERS = [
-  { id:1, name:"Mohamed Agha",    role:"manager",    pass:"1243", initials:"MA" },
-  { id:2, name:"Mohamed Hamdy",   role:"salesman",   pass:"2341", initials:"MH" },
-  { id:3, name:"Mohamed Almech",  role:"salesman",   pass:"4123", initials:"ME" },
-  { id:4, name:"Yahya Aldaour",   role:"salesman",   pass:"3241", initials:"YA" },
-  { id:5, name:"Munadel Yassine", role:"salesman",   pass:"4321", initials:"MY" },
-];
+const ENGINEERS = {
+  "Shakeel": { pin:"1122", color:"#4d9fff", isIT:true  },
+  "Sam":     { pin:"1112", color:"#00e5a0", isIT:false },
+  "Bernard": { pin:"1212", color:"#f0b429", isIT:false },
+  "Ghulam":  { pin:"2111", color:"#ff6b35", isIT:false },
+  "Ahmad":   { pin:"2211", color:"#a855f7", isIT:false }
+};
 
-const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
-const STATUSES = ["Open","Follow Up","Closed Won","Closed Lost"];
+const STATUS_OPTIONS = ["New","In Progress","Waiting","Closed"];
+let MY_NAME="", allData=[], myTickets=[], newTickets=[];
+let selectedStatuses=['New','In Progress','Waiting','Closed'];
+let pinBuffer="", pendingStatusChange=null, selectedTicketStatus="In Progress";
 
-// ─────────────────────────────────────────
-// STATE
-// ─────────────────────────────────────────
-let leads = [];
-let currentUser = null;
-let editingId = null;
-let activeTab = "leads";
-let chartSel = { city:null, product:null, brand:null, status:null };
-let filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:"", nextAction:"", status:"", salesman:"" };
+// ── PIN ──────────────────────────────────────────────────────
+function pinPress(digit){
+  if(pinBuffer.length>=4)return;
+  pinBuffer+=digit;
+  updateDots();
+  if(pinBuffer.length===4)setTimeout(checkPin,100);
+}
+function pinDelete(){
+  pinBuffer=pinBuffer.slice(0,-1);
+  updateDots();
+  document.getElementById('pin-error').innerText='';
+}
+function updateDots(){
+  for(let i=0;i<4;i++){
+    const dot=document.getElementById('dot-'+i);
+    dot.classList.toggle('filled',i<pinBuffer.length);
+    dot.classList.remove('error');
+  }
+}
+function checkPin(){
+  const matched=Object.entries(ENGINEERS).find(([name,eng])=>eng.pin===pinBuffer);
+  if(matched){
+    MY_NAME=matched[0];
+    localStorage.setItem('eng_name',MY_NAME);
+    localStorage.setItem('eng_pin',pinBuffer);
+    unlockDashboard();
+  }else{
+    for(let i=0;i<4;i++)document.getElementById('dot-'+i).classList.add('error');
+    document.getElementById('pin-error').innerText='Wrong PIN. Try again.';
+    setTimeout(()=>{pinBuffer='';updateDots();},800);
+  }
+}
+function unlockDashboard(){
+  const eng=ENGINEERS[MY_NAME];
+  document.documentElement.style.setProperty('--accent',eng.color);
+  document.getElementById('pin-screen').style.display='none';
+  document.getElementById('main').style.display='block';
+  document.getElementById('eng-title').innerHTML=MY_NAME+' — <span>My Dashboard</span>';
+  // Hide claim section for IT engineer
+  if(eng.isIT) document.getElementById('new-tickets-section').style.display='none';
+  loadData();
+}
+function logout(){
+  localStorage.removeItem('eng_name');
+  localStorage.removeItem('eng_pin');
+  MY_NAME='';pinBuffer='';
+  updateDots();
+  document.getElementById('pin-error').innerText='';
+  document.getElementById('main').style.display='none';
+  document.getElementById('content').style.display='none';
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('pin-screen').style.display='flex';
+  document.documentElement.style.setProperty('--accent','#00e5a0');
+}
+window.onload=()=>{
+  const savedName=localStorage.getItem('eng_name');
+  const savedPin=localStorage.getItem('eng_pin');
+  if(savedName&&savedPin&&ENGINEERS[savedName]&&ENGINEERS[savedName].pin===savedPin){
+    MY_NAME=savedName;pinBuffer=savedPin;unlockDashboard();
+  }
+};
 
-// ─────────────────────────────────────────
-// HELPERS & NORMALIZATION
-// ─────────────────────────────────────────
-function normalizeCity(raw) {
-  if (!raw) return "Other";
-  const c = raw.toLowerCase().trim();
-  if (c.includes("riyadh") || c.includes("الرياض")) return "Riyadh";
-  if (c.includes("jeddah") || c.includes("جدة")) return "Jeddah";
-  if (c.includes("dammam") || c.includes("الدمام")) return "Dammam";
-  return "Other";
+// ── TOAST ────────────────────────────────────────────────────
+function showToast(msg,color){
+  const t=document.getElementById('toast');
+  t.innerText=msg;t.style.background=color||'#00e5a0';
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);
 }
 
-function normalizeProduct(raw) {
-  if (!raw) return "Other";
-  const p = raw.toLowerCase();
-  if (p.includes("planmeca")) return "Planmeca";
-  if (p.includes("bisco")) return "Bisco";
-  if (p.includes("cj optic")) return "CJ Optic";
-  if (p.includes("mectron") || p.includes("piezo")) return "Mectron";
-  return "Other";
+// ── CONFIRM ──────────────────────────────────────────────────
+function confirmYes(){
+  document.getElementById('confirm-overlay').classList.remove('show');
+  if(pendingStatusChange){pendingStatusChange();pendingStatusChange=null;}
+}
+function confirmNo(){
+  document.getElementById('confirm-overlay').classList.remove('show');
+  pendingStatusChange=null;refreshUI();
+}
+function showConfirm(title,msg,callback){
+  document.getElementById('confirm-title').innerText=title;
+  document.getElementById('confirm-msg').innerText=msg;
+  pendingStatusChange=callback;
+  document.getElementById('confirm-overlay').classList.add('show');
 }
 
-// ─────────────────────────────────────────
-// LOGIN
-// ─────────────────────────────────────────
-function initLogin() {
-  const sel = document.getElementById("l-user");
-  USERS.forEach(u => {
-    const opt = document.createElement("option");
-    opt.value = u.id;
-    opt.textContent = u.name;
-    sel.appendChild(opt);
+// ── MODAL ────────────────────────────────────────────────────
+function openModal(){
+  const isIT=ENGINEERS[MY_NAME]?.isIT;
+  // Show status selector only for IT engineer
+  document.getElementById('status-selector-group').style.display=isIT?'block':'none';
+  document.getElementById('modal-title').innerText=isIT?'+ Add IT Ticket':'+ Add Hardware Ticket';
+  selectedTicketStatus='In Progress';
+  // Reset status selector
+  ['inprogress','waiting','closed'].forEach(s=>document.getElementById('sopt-'+s).className='status-option');
+  document.getElementById('sopt-inprogress').className='status-option sel-inprogress';
+  // Reset fields
+  document.getElementById('f-clinic').value='';
+  document.getElementById('f-phone').value='';
+  document.getElementById('f-device').value='';
+  document.getElementById('f-location').value='';
+  document.getElementById('f-desc').value='';
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){document.getElementById('modal').classList.remove('show');}
+
+function selectTicketStatus(status){
+  selectedTicketStatus=status;
+  ['inprogress','waiting','closed'].forEach(s=>document.getElementById('sopt-'+s).className='status-option');
+  const map={'In Progress':'inprogress','Waiting':'waiting','Closed':'closed'};
+  document.getElementById('sopt-'+map[status]).className='status-option sel-'+map[status];
+}
+
+async function submitTicket(){
+  const clinic=document.getElementById('f-clinic').value.trim();
+  const phone=document.getElementById('f-phone').value.trim();
+  const device=document.getElementById('f-device').value.trim();
+  const location=document.getElementById('f-location').value.trim();
+  const desc=document.getElementById('f-desc').value.trim();
+
+  if(!clinic){showToast('⚠ Please enter clinic name!','#ff6b35');return;}
+  if(!desc){showToast('⚠ Please enter description!','#ff6b35');return;}
+
+  const btn=document.getElementById('submit-btn');
+  btn.disabled=true;btn.innerText='Adding...';
+
+  const isIT=ENGINEERS[MY_NAME]?.isIT;
+  const timestamp=new Date().toISOString();
+  const ticketType=isIT?'Computer / System (IT)':'Equipment / Dental Unit';
+  // IT engineer: assigned to themselves with chosen status
+  // Hardware engineer: assigned to themselves as In Progress
+  const assignName=MY_NAME;
+  const status=isIT?selectedTicketStatus:'In Progress';
+
+  try{
+    await fetchJSONP(SCRIPT+
+      '?action=addRow'+
+      '&timestamp='+encodeURIComponent(timestamp)+
+      '&name='+encodeURIComponent(assignName)+
+      '&clinic='+encodeURIComponent(clinic)+
+      '&phone='+encodeURIComponent(phone)+
+      '&device='+encodeURIComponent(device)+
+      '&location='+encodeURIComponent(location)+
+      '&description='+encodeURIComponent(desc)+
+      '&ticketType='+encodeURIComponent(ticketType)+
+      '&status='+encodeURIComponent(status)
+    );
+    closeModal();
+    showToast('✅ Ticket added!');
+    await loadData();
+  }catch(e){showToast('⚠ Error adding ticket','#ff6b35');}
+  btn.disabled=false;btn.innerText='➕ Add Ticket';
+}
+
+// ── JSONP ────────────────────────────────────────────────────
+function fetchJSONP(url){
+  return new Promise((resolve,reject)=>{
+    const cbName='cb_'+Math.random().toString(36).substr(2,9);
+    const script=document.createElement('script');
+    const timeout=setTimeout(()=>{try{document.body.removeChild(script);}catch(e){}delete window[cbName];reject(new Error('Timeout'));},15000);
+    window[cbName]=(data)=>{clearTimeout(timeout);try{document.body.removeChild(script);}catch(e){}delete window[cbName];resolve(data);};
+    script.onerror=()=>{clearTimeout(timeout);try{document.body.removeChild(script);}catch(e){}delete window[cbName];reject(new Error('Script error'));};
+    script.src=url+(url.includes('?')?'&':'?')+'callback='+cbName+'&t='+Date.now();
+    document.body.appendChild(script);
   });
 }
 
-function doLogin() {
-  const uid = parseInt(document.getElementById("l-user").value);
-  const pass = document.getElementById("l-pass").value;
-  const user = USERS.find(u => u.id === uid && u.pass === pass);
-  const errEl = document.getElementById("login-error");
-  if (!user) { errEl.style.display = "block"; return; }
-  
-  currentUser = user;
-  document.getElementById("top-avatar").textContent = user.initials;
-  document.getElementById("top-name").textContent = user.name;
-  document.getElementById("top-role").textContent = user.role.toUpperCase();
-  document.getElementById("login-screen").style.display = "none";
-  document.getElementById("app-screen").classList.add("visible");
-  loadFromSheet();
+// ── LOAD DATA ────────────────────────────────────────────────
+async function loadData(){
+  const btn=document.getElementById('rbtn');
+  btn.style.opacity='0.5';btn.innerText='↻ Loading...';
+  try{
+    const data=await fetchJSONP(SCRIPT);
+    allData=data
+      .filter(r=>r['Timestamp']&&r['Timestamp'].toString().trim()!=='')
+      .sort((a,b)=>new Date(b['Timestamp'])-new Date(a['Timestamp']));
+    myTickets=allData.filter(r=>getVal(r,'Name')===MY_NAME);
+    newTickets=allData.filter(r=>{
+      const name=getVal(r,'Name');
+      const status=getStatus(r).toLowerCase();
+      const type=getVal(r,'Ticket Type').toLowerCase();
+      const isIT=type.includes('it')||type.includes('computer')||type.includes('system');
+      return name===''&&status==='new'&&!isIT;
+    });
+    document.getElementById('loading').style.display='none';
+    document.getElementById('content').style.display='block';
+    refreshUI();
+  }catch(e){alert("Error: "+e.message);}
+  btn.style.opacity='1';btn.innerText='↻ Refresh';
 }
 
-function signOut() {
-  currentUser = null;
-  document.getElementById("app-screen").classList.remove("visible");
-  document.getElementById("login-screen").style.display = "flex";
+function refreshUI(){updateStats();renderNewTickets();renderMyTickets();}
+function getVal(obj,...keys){for(let key of keys){if(obj[key]!==undefined&&obj[key]!==null&&obj[key].toString().trim()!=='')return obj[key].toString().trim();}return "";}
+function getStatus(r){return getVal(r,'Current Status','Status')||'New';}
+function calculateDuration(start,end){
+  const s=new Date(start),e=end?new Date(end):new Date();
+  if(isNaN(s.getTime()))return '-';
+  const diffHrs=Math.floor((e-s)/(1000*60*60)),diffDays=Math.floor(diffHrs/24);
+  return diffDays>0?`${diffDays}d ${diffHrs%24}h`:`${diffHrs}h`;
 }
 
-// ─────────────────────────────────────────
-// DATA LOADING
-// ─────────────────────────────────────────
-async function loadFromSheet() {
-  const dot = document.getElementById("sync-dot");
-  const lbl = document.getElementById("sync-label");
-  dot.className = "sync-dot syncing";
-  lbl.textContent = "Syncing...";
-  
-  try {
-    const res = await fetch(SCRIPT_URL + "?action=get");
-    const raw = await res.json();
-    leads = raw.map((r, i) => ({
-      id: 2000 + i,
-      name: (r.name || r["Account Name"] || "").trim(),
-      location: (r.location || r.Location || "").trim(),
-      salesman: r.salesman || r.Name || "",
-      mainProduct: (r.mainProduct || r["The main product of the visit"] || "").trim(),
-      status: (r.nextAction || "").toLowerCase().includes("won") ? "Closed Won" : "Open",
-      brands: (r.brands || "").split(",").map(s => s.trim()).filter(Boolean),
-      clientStatus: r.clientStatus || "Old",
-      nextAction: r.nextAction || "",
-      contact: r.contact || "",
-      value: Number(r.value || 0)
-    }));
-    lbl.textContent = "Synced " + new Date().toLocaleTimeString();
-  } catch(e) {
-    lbl.textContent = "Offline Mode";
-  } finally {
-    dot.className = "sync-dot";
-    renderApp();
-  }
+// ── STATS ────────────────────────────────────────────────────
+function updateStats(){
+  const c={closed:0,open:0,inprogress:0,waiting:0};
+  myTickets.forEach(r=>{
+    const s=getStatus(r).toLowerCase();
+    if(s.includes('closed'))c.closed++;
+    else if(s.includes('in progress'))c.inprogress++;
+    else if(s.includes('waiting'))c.waiting++;
+    else c.open++;
+  });
+  document.getElementById('count-closed').innerText=c.closed;
+  document.getElementById('count-open').innerText=c.open;
+  document.getElementById('count-inprogress').innerText=c.inprogress;
+  document.getElementById('count-waiting').innerText=c.waiting;
 }
 
-// ─────────────────────────────────────────
-// RENDERING
-// ─────────────────────────────────────────
-function renderApp() {
-  const myLeads = currentUser.role === "manager" ? leads : leads.filter(l => l.salesman === currentUser.name);
-  
-  // Metrics
-  const won = myLeads.filter(l => l.status === "Closed Won").length;
-  document.getElementById("metrics-row").innerHTML = `
-    <div class="metric-card"><div class="metric-label">Total Accounts</div><div class="metric-value">${myLeads.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Won Pipeline</div><div class="metric-value">${won}</div></div>
-    <div class="metric-card"><div class="metric-label">New Clients</div><div class="metric-value">${myLeads.filter(l=>l.clientStatus==="New").length}</div></div>
-  `;
-
-  // Tabs
-  const tabs = [{id:"leads", label:"Accounts"}, {id:"charts", label:"Analytics"}];
-  if(currentUser.role==="manager") tabs.push({id:"team", label:"Team"});
-  document.getElementById("tab-bar").innerHTML = tabs.map(t => 
-    `<button class="tab-btn ${activeTab===t.id?"active":""}" onclick="switchTab('${t.id}')">${t.label}</button>`
-  ).join("");
-
-  renderTabContent(myLeads);
+function toggleSlice(status){
+  const index=selectedStatuses.indexOf(status);
+  if(index>-1){selectedStatuses.splice(index,1);document.getElementById('btn-'+status).classList.remove('active-slice');}
+  else{selectedStatuses.push(status);document.getElementById('btn-'+status).classList.add('active-slice');}
+  renderMyTickets();
 }
 
-function switchTab(t) { activeTab = t; renderApp(); }
+// ── CLAIM ────────────────────────────────────────────────────
+async function claimTicket(timestamp,btnEl){
+  btnEl.disabled=true;btnEl.innerText='Claiming...';
+  try{
+    const result=await fetchJSONP(SCRIPT+'?action=claim&timestamp='+encodeURIComponent(timestamp)+'&name='+encodeURIComponent(MY_NAME));
+    if(result.claimed){showToast('✅ Ticket claimed! → In Progress');await loadData();}
+    else{showToast('⚠ Already claimed by '+result.assignedTo,'#ff6b35');await loadData();}
+  }catch(e){showToast('⚠ Error claiming','#ff6b35');btnEl.disabled=false;btnEl.innerText='⚡ Claim';}
+}
 
-function renderTabContent(data) {
-  const el = document.getElementById("tab-content");
-  if (activeTab === "leads") {
-    el.innerHTML = `
-      <div class="table-card"><div class="table-wrap"><table>
-        <thead><tr><th>Account</th><th>Location</th><th>Product</th><th>Status</th><th>By</th></tr></thead>
-        <tbody>${data.map(l => `
-          <tr>
-            <td>${l.name}</td>
-            <td>${l.location}</td>
-            <td>${l.mainProduct}</td>
-            <td><span class="badge b-follow">${l.status}</span></td>
-            <td>${l.salesman}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table></div></div>`;
-  } else if (activeTab === "charts") {
-    el.innerHTML = `<div class="charts-grid">
-      <div class="chart-card"><div class="chart-title">By City</div><canvas id="c-city"></canvas></div>
-      <div class="chart-card"><div class="chart-title">By Status</div><canvas id="c-status"></canvas></div>
+// ── STATUS UPDATE ────────────────────────────────────────────
+function updateStatus(idx,newStatus,selectEl){
+  const oldStatus=getStatus(myTickets[idx]);
+  showConfirm(
+    'Confirm Status Change',
+    `Change from "${oldStatus}" to "${newStatus==='Waiting'?'Waiting for Spare Parts':newStatus}"?`,
+    async()=>{
+      selectEl.disabled=true;
+      const ticket=myTickets[idx];
+      const timestamp=getVal(ticket,'Timestamp');
+      try{
+        await fetchJSONP(SCRIPT+'?action=updateStatus&timestamp='+encodeURIComponent(timestamp)+'&status='+encodeURIComponent(newStatus));
+        myTickets[idx]['Current Status']=newStatus;
+        if(newStatus!=='Waiting')myTickets[idx]['_spareParts']='';
+        showToast('✅ Status: '+(newStatus==='Waiting'?'Waiting for Spare Parts':newStatus));
+      }catch(e){myTickets[idx]['Current Status']=newStatus;showToast('⚠ Local only','#f0b429');}
+      refreshUI();
+    }
+  );
+}
+
+// ── SPARE PARTS ──────────────────────────────────────────────
+async function saveSpareParts(idx,inputEl,btnEl){
+  const parts=inputEl.value.trim();
+  if(!parts){showToast('⚠ Enter spare parts!','#ff6b35');return;}
+  btnEl.disabled=true;btnEl.innerText='...';
+  const ticket=myTickets[idx];
+  const timestamp=getVal(ticket,'Timestamp');
+  try{
+    await fetchJSONP(SCRIPT+'?action=updateStatus&timestamp='+encodeURIComponent(timestamp)+'&status=Waiting&spareParts='+encodeURIComponent(parts));
+    myTickets[idx]['_spareParts']=parts;showToast('🔧 Spare parts saved!');
+  }catch(e){myTickets[idx]['_spareParts']=parts;showToast('⚠ Local only','#f0b429');}
+  refreshUI();
+}
+
+// ── RENDER NEW TICKETS ───────────────────────────────────────
+function renderNewTickets(){
+  const tbody=document.getElementById('tbody-new');
+  if(!tbody)return;
+  if(newTickets.length===0){tbody.innerHTML=`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No new unassigned tickets 🎉</td></tr>`;return;}
+  tbody.innerHTML=newTickets.map((r,i)=>{
+    const timestamp=getVal(r,'Timestamp');
+    const clinicName=getVal(r,'Customer/Account Name','Clinic/Hospital Name');
+    const contactName=getVal(r,'Contact Person Name');
+    const phoneNum=getVal(r,'Mobile Number');
+    const location=getVal(r,'Location');
+    const description=getVal(r,'Problem Description','Description of the Technical Issue');
+    const contactCell=`<div class="client-info">
+      ${contactName?`<span class="cname">👤 ${contactName}</span>`:'<span style="color:var(--muted)">-</span>'}
+      ${phoneNum?`<a class="phone" href="tel:${phoneNum}">📞 ${phoneNum}</a>`:''}
+      ${location?`<span class="clocation">📍 ${location}</span>`:''}
     </div>`;
-    renderCharts(data);
-  } else if (activeTab === "team") {
-    el.innerHTML = `<div class="table-card"><div class="table-header" style="padding:15px; font-weight:600;">Team Performance</div>
-      <table><thead><tr><th>Salesman</th><th>Accounts</th><th>Won</th></tr></thead>
-      <tbody>${USERS.filter(u=>u.role==="salesman").map(u => {
-        const ul = leads.filter(l=>l.salesman === u.name);
-        return `<tr><td>${u.name}</td><td>${ul.length}</td><td>${ul.filter(l=>l.status==="Closed Won").length}</td></tr>`;
-      }).join("")}</tbody></table></div>`;
-  }
+    return `<tr class="new-ticket-row">
+      <td>${i+1}</td>
+      <td style="font-weight:600">${clinicName||'-'}</td>
+      <td>${contactCell}</td>
+      <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${description||'-'}</td>
+      <td><button class="claim-btn" id="cbtn-${i}" onclick="claimTicket('${timestamp}',document.getElementById('cbtn-${i}'))">⚡ Claim</button></td>
+    </tr>`;
+  }).join('');
 }
 
-function renderCharts(data) {
-  const cities = {}; data.forEach(l => { const c = normalizeCity(l.location); cities[c] = (cities[c]||0)+1; });
-  new Chart(document.getElementById("c-city"), {
-    type: 'bar',
-    data: { labels: Object.keys(cities), datasets: [{ data: Object.values(cities), backgroundColor: '#3498db' }] },
-    options: { plugins: { legend: { display: false } } }
+// ── RENDER MY TICKETS ────────────────────────────────────────
+function renderMyTickets(){
+  let tickets=myTickets.filter(r=>{
+    const s=getStatus(r).toLowerCase();
+    return selectedStatuses.some(status=>{
+      if(status==='Waiting')return s.includes('waiting');
+      if(status==='New')return s==='new'||s==='';
+      if(status==='In Progress')return s.includes('in progress');
+      if(status==='Closed')return s.includes('closed');
+      return false;
+    });
   });
-
-  const stats = { "Open": data.filter(l=>l.status==="Open").length, "Won": data.filter(l=>l.status==="Closed Won").length };
-  new Chart(document.getElementById("c-status"), {
-    type: 'doughnut',
-    data: { labels: Object.keys(stats), datasets: [{ data: Object.values(stats), backgroundColor: ['#f0a500','#2ecc71'] }] }
-  });
+  const tbody=document.getElementById('tbody-mine');
+  if(tickets.length===0){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No tickets found</td></tr>`;return;}
+  const engColor=ENGINEERS[MY_NAME]?.color||'var(--accent)';
+  tbody.innerHTML=tickets.map((r,i)=>{
+    const idx=myTickets.indexOf(r);
+    const statusVal=getStatus(r);
+    const spareParts=r['_spareParts']||getVal(r,'What spare part is needed?');
+    const isWaiting=statusVal.toLowerCase().includes('waiting');
+    const ticketType=getVal(r,'Ticket Type');
+    const isIT=ticketType.toLowerCase().includes('it')||ticketType.toLowerCase().includes('computer')||ticketType.toLowerCase().includes('system');
+    const clinicName=getVal(r,'Customer/Account Name','Clinic/Hospital Name');
+    const contactName=getVal(r,'Contact Person Name');
+    const phoneNum=getVal(r,'Mobile Number');
+    const location=getVal(r,'Location');
+    const description=getVal(r,'Problem Description','Description of the Technical Issue');
+    const typeBadge=ticketType?`<span class="type-badge ${isIT?'type-it':'type-hw'}">${isIT?'💻 IT':'🔧 HW'}</span>`:'-';
+    const contactCell=`<div class="client-info">
+      ${contactName?`<span class="cname">👤 ${contactName}</span>`:'<span style="color:var(--muted)">-</span>'}
+      ${phoneNum?`<a class="phone" href="tel:${phoneNum}">📞 ${phoneNum}</a>`:''}
+      ${location?`<span class="clocation">📍 ${location}</span>`:''}
+    </div>`;
+    const statusCell=`<select class="status-select" onchange="updateStatus(${idx},this.value,this)">
+      ${STATUS_OPTIONS.map(s=>`<option value="${s}" ${statusVal===s?'selected':''}>${s==='Waiting'?'Waiting for Spare Parts':s}</option>`).join('')}
+    </select>`;
+    const spareCell=isWaiting
+      ?`<div class="spare-wrap">
+          ${spareParts?`<span class="spare-text">🔧 ${spareParts}</span>`:''}
+          <input class="spare-input" id="spare-${idx}" placeholder="Enter parts..." value="${spareParts}"/>
+          <button class="save-btn" id="sbtn-${idx}" onclick="saveSpareParts(${idx},document.getElementById('spare-${idx}'),document.getElementById('sbtn-${idx}'))">💾 Save</button>
+        </div>`
+      :`<span class="spare-text">${spareParts?'🔧 '+spareParts:'-'}</span>`;
+    return `<tr>
+      <td>${i+1}</td>
+      <td>${typeBadge}</td>
+      <td style="font-weight:600">${clinicName||'-'}</td>
+      <td>${contactCell}</td>
+      <td>${statusCell}</td>
+      <td>${spareCell}</td>
+      <td><span style="color:${engColor}">${calculateDuration(getVal(r,'Timestamp'),getVal(r,'Closing Date'))}</span></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)">${description||'-'}</td>
+    </tr>`;
+  }).join('');
 }
-
-initLogin();
 </script>
 </body>
 </html>
