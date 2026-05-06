@@ -515,6 +515,29 @@ function parseSheetDate(str) {
 }
 function initials(name) { return name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase(); }
 function getMyLeads() { return currentUser.role === "manager" ? leads : leads.filter(l => l.uid === currentUser.id); }
+
+function getTimeBoundary() {
+  const now = new Date();
+  if (timePeriod === "week") {
+    const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d;
+  }
+  if (timePeriod === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (timePeriod === "year")  return new Date(now.getFullYear(), 0, 1);
+  return null;
+}
+
+function applyTimeFilter(data) {
+  const boundary = getTimeBoundary();
+  if (!boundary) return data;
+  return data.filter(l => { if (!l.opened) return false; return new Date(l.opened) >= boundary; });
+}
+
+function getTimePeriodLabel() {
+  if (timePeriod === "week")  return "This Week";
+  if (timePeriod === "month") return "This Month";
+  if (timePeriod === "year")  return "This Year";
+  return "All Time";
+}
 function applyFilters() {
   return leads.filter(l => {
     if (currentUser.role !== "manager" && l.uid !== currentUser.id) return false;
@@ -857,10 +880,11 @@ function renderAddTab() {
 
 // Chart selection state — null = no filter active for that dimension
 let chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
+let timePeriod = "all"; // all | week | month | year
 let chartInstances = {};
 
 function chartFilteredLeads() {
-  return getMyLeads().filter(l => {
+  return applyTimeFilter(getMyLeads()).filter(l => {
     if (chartSel.city      && normalizeCity(l.location)    !== chartSel.city)      return false;
     if (chartSel.product   && normalizeProduct(l.mainProduct) !== chartSel.product) return false;
     if (chartSel.brand     && !(l.brands||[]).includes(chartSel.brand))            return false;
@@ -900,7 +924,7 @@ function refreshChartFilterBar() {
 }
 
 function refreshAllCharts() {
-  const d = chartFilteredLeads();
+  const d = chartFilteredLeads(); // already time-filtered via chartFilteredLeads→applyTimeFilter
   const clrs = ["#3498db","#2ecc71","#f0a500","#e74c3c","#9b59b6","#1abc9c","#e67e22","#34495e","#e91e63","#00bcd4","#8bc34a","#ff5722"];
   const dimAlpha = (dim, label, base) => chartSel[dim] === null ? base : chartSel[dim] === label ? base : base + "55";
 
@@ -965,13 +989,21 @@ function refreshAllCharts() {
 }
 
 function renderChartsTab() {
-  const d = getMyLeads();
+  const d = applyTimeFilter(getMyLeads());
   const cc = getCityCounts(d);
   const pc = getProductCounts(d);
   const cityH = Math.max(180, cc.length * 38 + 50);
   const prodH = Math.max(180, pc.length * 38 + 50);
   chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
   return `
+  <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Period:</span>
+    ${["all","week","month","year"].map(p=>`
+      <button onclick="setTimePeriod('${p}')" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${timePeriod===p?"var(--accent)":"var(--border)"};background:${timePeriod===p?"var(--accent)":"transparent"};color:${timePeriod===p?"#000":"var(--text2)"};-webkit-appearance:none;appearance:none;">
+        ${{all:"All time",week:"This week",month:"This month",year:"This year"}[p]}
+      </button>`).join("")}
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${d.length} visit${d.length!==1?"s":""} in period</span>
+  </div>
   <div id="chart-filter-bar" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;"></div>
   <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Click any bar or slice to filter all charts. Click again to deselect.</div>
   <div class="charts-grid">
@@ -1006,7 +1038,7 @@ function renderChartsTab() {
 
 function renderCharts() {
   chartInstances = {};
-  const d = getMyLeads();
+  const d = applyTimeFilter(getMyLeads());
   const cc = getCityCounts(d);
   const pc = getProductCounts(d);
   const clrs = ["#3498db","#2ecc71","#f0a500","#e74c3c","#9b59b6","#1abc9c","#e67e22","#34495e","#e91e63","#00bcd4","#8bc34a","#ff5722"];
@@ -1101,8 +1133,16 @@ function renderCharts() {
 // TEAM TAB
 // ─────────────────────────────────────────
 function renderTeamTab() {
-  const salesmen = USERS.filter(u => u.role === "salesman" || u.id === currentUser.id);
-  let html = `<div class="team-card"><div class="team-header">Team Performance</div>
+  const tLeads = applyTimeFilter(leads);
+  const timeBtns = ["all","week","month","year"].map(p=>`
+    <button onclick="setTimePeriod('${p}')" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${timePeriod===p?'var(--accent)':'var(--border)'};background:${timePeriod===p?'var(--accent)':'transparent'};color:${timePeriod===p?'#000':'var(--text2)'};-webkit-appearance:none;appearance:none;">${{all:'All time',week:'This week',month:'This month',year:'This year'}[p]}</button>`).join('');
+  let html = `
+  <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Period:</span>
+    ${timeBtns}
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${tLeads.length} visit${tLeads.length!==1?'s':''} — ${getTimePeriodLabel()}</span>
+  </div>
+  <div class="team-card"><div class="team-header">Team Performance — ${getTimePeriodLabel()}</div>
   <div class="table-wrap"><table><thead><tr>
     <th><span class="col-head">Salesman</span></th>
     <th style="width:15%;"><span class="col-head">Accounts</span></th>
@@ -1112,7 +1152,7 @@ function renderTeamTab() {
     <th style="width:13%;"><span class="col-head">Active</span></th>
   </tr></thead><tbody>`;
   USERS.filter(u => u.role === "salesman").forEach(u => {
-    const ul = leads.filter(l => l.uid === u.id);
+    const ul = applyTimeFilter(leads).filter(l => l.uid === u.id);
     const m = metrics(ul);
     html += `<tr>
       <td><div style="display:flex;align-items:center;gap:10px;">
@@ -1133,6 +1173,14 @@ function renderTeamTab() {
 // ─────────────────────────────────────────
 // ACTIONS
 // ─────────────────────────────────────────
+function setTimePeriod(p) {
+  timePeriod = p;
+  chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
+  renderApp();
+  // Re-render charts after DOM updates
+  if(activeTab === "charts") setTimeout(() => renderCharts(), 50);
+}
+
 function switchTab(t) { activeTab = t; if (t !== "add") editingId = null; renderApp(); }
 function startEdit(id) { editingId = id; activeTab = "add"; renderApp(); }
 function cancelEdit() { editingId = null; activeTab = "leads"; renderApp(); }
