@@ -318,6 +318,44 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
 
+/* ── MULTI-SELECT FILTER ── */
+.ms-wrap{position:relative;width:100%;}
+.ms-btn{
+  width:100%;text-align:left;font-size:11px;padding:4px 22px 4px 6px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:4px;
+  color:var(--text2);cursor:pointer;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;position:relative;-webkit-appearance:none;appearance:none;
+  font-family:var(--font);
+}
+.ms-btn::after{content:'▾';position:absolute;right:5px;top:50%;-webkit-transform:translateY(-50%);transform:translateY(-50%);font-size:9px;color:var(--text3);}
+.ms-btn.active{border-color:var(--accent);color:var(--accent);}
+.ms-dd{
+  display:none;position:absolute;top:calc(100% + 3px);left:0;min-width:140px;max-width:200px;
+  background:var(--bg3);border:1px solid var(--border2);border-radius:6px;
+  z-index:200;max-height:200px;overflow-y:auto;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+}
+.ms-dd.open{display:block;}
+.ms-opt{
+  display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;
+  gap:8px;padding:7px 10px;font-size:12px;color:var(--text);cursor:pointer;
+  -webkit-transition:background .1s;transition:background .1s;
+}
+.ms-opt:hover{background:var(--bg4);}
+.ms-opt input[type=checkbox]{
+  width:13px;height:13px;-webkit-flex-shrink:0;flex-shrink:0;
+  border:1px solid var(--border2);border-radius:2px;
+  background:var(--bg4);-webkit-appearance:none;appearance:none;
+  position:relative;cursor:pointer;accent-color:var(--accent);
+}
+.ms-opt input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent);}
+.ms-opt input[type=checkbox]:checked::after{
+  content:'';position:absolute;left:3px;top:0px;
+  width:5px;height:8px;border:2px solid #000;
+  border-top:none;border-left:none;
+  -webkit-transform:rotate(45deg);transform:rotate(45deg);
+}
+
 /* ── MOBILE ── */
 @media(max-width:600px){
   .main{padding:12px;}
@@ -476,7 +514,7 @@ let activeTab = "leads";
 let syncing = false;
 let lastSync = null;
 let saveMsg = { text: "", type: "" };
-let filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:"", nextAction:"", status:"", salesman:"" };
+let filters = { name:"", location:[], clientStatus:[], brands:[], mainProduct:[], nextAction:"", status:[], salesman:[] };
 
 // ─────────────────────────────────────────
 // HELPERS
@@ -542,13 +580,13 @@ function applyFilters() {
   return leads.filter(l => {
     if (currentUser.role !== "manager" && l.uid !== currentUser.id) return false;
     if (filters.name && !l.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
-    if (filters.location && normalizeCity(l.location).toLowerCase() !== filters.location.toLowerCase()) return false;
-    if (filters.clientStatus && l.clientStatus !== filters.clientStatus) return false;
-    if (filters.brands && !(l.brands || []).includes(filters.brands)) return false;
-    if (filters.mainProduct && normalizeProduct(l.mainProduct).toLowerCase() !== filters.mainProduct.toLowerCase()) return false;
     if (filters.nextAction && !l.nextAction.toLowerCase().includes(filters.nextAction.toLowerCase())) return false;
-    if (filters.status && l.status !== filters.status) return false;
-    if (filters.salesman && l.uid !== parseInt(filters.salesman)) return false;
+    if (filters.location.length > 0 && !filters.location.includes(normalizeCity(l.location))) return false;
+    if (filters.clientStatus.length > 0 && !filters.clientStatus.includes(l.clientStatus)) return false;
+    if (filters.brands.length > 0 && !filters.brands.some(b => (l.brands||[]).includes(b))) return false;
+    if (filters.mainProduct.length > 0 && !filters.mainProduct.includes(normalizeProduct(l.mainProduct))) return false;
+    if (filters.status.length > 0 && !filters.status.includes(l.status)) return false;
+    if (filters.salesman.length > 0 && !filters.salesman.includes(String(l.uid))) return false;
     return true;
   });
 }
@@ -706,7 +744,7 @@ function doLogin() {
   currentUser = user;
   activeTab = "leads";
   editingId = null;
-  filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:"", nextAction:"", status:"", salesman:"" };
+  filters = { name:"", location:[], clientStatus:[], brands:[], mainProduct:[], nextAction:"", status:[], salesman:[] };
 
   // Set topbar user info
   document.getElementById("top-avatar").textContent = user.initials;
@@ -782,32 +820,70 @@ function renderLeadsTab() {
   const uniqueCities = [...new Set(myLeads.map(l => normalizeCity(l.location)).filter(Boolean))].sort();
   const uniqueProducts = [...new Set(myLeads.map(l => normalizeProduct(l.mainProduct)).filter(x => x && x !== "Other"))].sort();
   const salesmen = USERS.filter(u => u.role === "salesman" || u.id === 1);
-  const activeFilters = Object.values(filters).filter(v => v !== "").length;
+  const hasFilter = filters.name || filters.nextAction ||
+    filters.location.length || filters.clientStatus.length ||
+    filters.brands.length || filters.mainProduct.length ||
+    filters.status.length || filters.salesman.length;
+
+  // Helper: build multi-select dropdown
+  function msFilter(key, id, options, labelFn) {
+    const sel = filters[key] || [];
+    const label = sel.length === 0 ? "All" : sel.length === 1 ? (labelFn ? labelFn(sel[0]) : sel[0]) : `${sel.length} selected`;
+    const opts = options.map(o => {
+      const val = o.val !== undefined ? o.val : o;
+      const lbl = o.lbl !== undefined ? o.lbl : o;
+      const checked = sel.includes(String(val)) ? "checked" : "";
+      return `<label class="ms-opt"><input type="checkbox" value="${val}" ${checked} onchange="toggleFilter('${key}','${val}');event.stopPropagation();"/>${lbl}</label>`;
+    }).join("");
+    return `<div class="ms-wrap">
+      <button class="ms-btn ${sel.length > 0 ? "active" : ""}" onclick="toggleDropdown('${id}',event)">${label}</button>
+      <div class="ms-dd" id="${id}">${opts}</div>
+    </div>`;
+  }
 
   let html = `<div class="table-card">`;
-  if (activeFilters > 0) {
+  if (hasFilter) {
     html += `<div class="table-toolbar">
       <span class="filter-count">${filtered.length} / ${myLeads.length} accounts</span>
       <button class="btn btn-sm btn-danger" onclick="clearFilters()">✕ Clear filters</button>
     </div>`;
   }
+
   html += `<div class="table-wrap"><table><thead><tr>
-    <th style="min-width:130px;"><span class="col-head">Account</span><input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)"/></th>
-    <th style="min-width:110px;"><span class="col-head">Location</span>
-      <select onchange="setFilter('location',this.value)"><option value="">All</option>${uniqueCities.map(c=>`<option ${filters.location===c?"selected":""}>${c}</option>`).join("")}</select></th>
-    <th style="min-width:80px;"><span class="col-head">Client</span>
-      <select onchange="setFilter('clientStatus',this.value)"><option value="">All</option><option ${filters.clientStatus==="New"?"selected":""}>New</option><option ${filters.clientStatus==="Old"?"selected":""}>Old</option></select></th>
-    <th style="min-width:130px;"><span class="col-head">Brands</span>
-      <select onchange="setFilter('brands',this.value)"><option value="">All</option>${BRANDS.map(b=>`<option ${filters.brands===b?"selected":""}>${b}</option>`).join("")}</select></th>
-    <th style="min-width:130px;"><span class="col-head">Main Product</span>
-      <select onchange="setFilter('mainProduct',this.value)"><option value="">All</option>${uniqueProducts.map(p=>`<option ${filters.mainProduct===p?"selected":""}>${p}</option>`).join("")}</select></th>
-    <th style="min-width:130px;"><span class="col-head">Next Action</span><input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)"/></th>
+    <th style="min-width:130px;">
+      <span class="col-head">Account</span>
+      <input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/>
+    </th>
+    <th style="min-width:120px;">
+      <span class="col-head">Location</span>
+      ${msFilter('location','dd-location', uniqueCities)}
+    </th>
+    <th style="min-width:90px;">
+      <span class="col-head">Client</span>
+      ${msFilter('clientStatus','dd-client', ['New','Old'])}
+    </th>
+    <th style="min-width:140px;">
+      <span class="col-head">Brands</span>
+      ${msFilter('brands','dd-brands', BRANDS)}
+    </th>
+    <th style="min-width:140px;">
+      <span class="col-head">Main Product</span>
+      ${msFilter('mainProduct','dd-product', uniqueProducts)}
+    </th>
+    <th style="min-width:130px;">
+      <span class="col-head">Next Action</span>
+      <input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/>
+    </th>
     <th style="min-width:110px;"><span class="col-head">Contact</span></th>
-    <th style="min-width:100px;"><span class="col-head">Status</span>
-      <select onchange="setFilter('status',this.value)"><option value="">All</option>${STATUSES.map(s=>`<option ${filters.status===s?"selected":""}>${s}</option>`).join("")}</select></th>
+    <th style="min-width:110px;">
+      <span class="col-head">Status</span>
+      ${msFilter('status','dd-status', STATUSES)}
+    </th>
     <th style="min-width:90px;"><span class="col-head">Date</span></th>
-    ${isManager ? `<th style="min-width:70px;"><span class="col-head">By</span>
-      <select onchange="setFilter('salesman',this.value)"><option value="">All</option>${salesmen.map(u=>`<option value="${u.id}" ${filters.salesman==u.id?"selected":""}>${u.initials}</option>`).join("")}</select></th>` : ""}
+    ${isManager ? `<th style="min-width:130px;">
+      <span class="col-head">By</span>
+      ${msFilter('salesman','dd-salesman', salesmen.map(u => ({val:String(u.id), lbl:u.name})))}
+    </th>` : ""}
     <th style="min-width:90px;"><span class="col-head">Actions</span></th>
   </tr></thead><tbody>`;
 
@@ -831,7 +907,7 @@ function renderLeadsTab() {
         <td class="td-nowrap" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${l.contact||""}">${l.contact||"-"}</td>
         <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
         <td class="td-nowrap" style="font-size:11px;">${l.opened||"-"}</td>
-        ${isManager ? `<td><span class="sal-badge" title="${owner?owner.name:""}">${owner?owner.initials:"?"}</span></td>` : ""}
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
         <td class="td-nowrap">
           <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
           ${isManager ? ` <button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Del</button>` : ""}
@@ -852,7 +928,13 @@ function renderAddTab() {
   return `<div class="form-card">
     <div class="form-title">${ed ? "✎ Edit Account" : "＋ Add New Account"}</div>
     <div class="form-grid">
-      <div class="form-full"><label class="form-label">Account name *</label><input id="f-name" value="${ed?ed.name:""}" placeholder="e.g. Dr. Ahmed Clinic"/></div>
+      <div class="form-full">
+        <label class="form-label">Account name *</label>
+        <input id="f-name" value="${ed?ed.name:""}" placeholder="e.g. Dr. Ahmed Clinic" list="account-suggestions" autocomplete="off"/>
+        <datalist id="account-suggestions">
+          ${[...leads].reverse().reduce((acc,l)=>{if(l.name&&!acc.includes(l.name))acc.push(l.name);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+        </datalist>
+      </div>
       <div><label class="form-label">Phone</label><input id="f-phone" value="${ed?ed.phone||"":""}" placeholder="05XXXXXXXX"/></div>
       <div><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
       <div class="form-full">
@@ -868,8 +950,20 @@ function renderAddTab() {
         <label class="form-label" style="margin-bottom:8px;">Brands discussed</label>
         <div class="brand-grid">${BRANDS.map(b=>`<label class="brand-check"><input type="checkbox" value="${b}" ${selBrands.includes(b)?"checked":""}/>${b}</label>`).join("")}</div>
       </div>
-      <div class="form-full"><label class="form-label">Main product of visit</label><input id="f-mainprod" value="${ed?ed.mainProduct||"":""}" placeholder="e.g. Planmeca unit, Bisco samples"/></div>
-      <div class="form-full"><label class="form-label">Next action</label><input id="f-nextaction" value="${ed?ed.nextAction||"":""}" placeholder="e.g. Send quotation, Follow up Thursday"/></div>
+      <div class="form-full">
+        <label class="form-label">Main product of visit</label>
+        <input id="f-mainprod" value="${ed?ed.mainProduct||"":""}" placeholder="e.g. Planmeca unit, Bisco samples" list="mainprod-suggestions" autocomplete="off"/>
+        <datalist id="mainprod-suggestions">
+          ${[...leads].reverse().reduce((acc,l)=>{if(l.mainProduct&&!acc.includes(l.mainProduct))acc.push(l.mainProduct);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+        </datalist>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Next action</label>
+        <input id="f-nextaction" value="${ed?ed.nextAction||"":""}" placeholder="e.g. Send quotation, Follow up Thursday" list="nextaction-suggestions" autocomplete="off"/>
+        <datalist id="nextaction-suggestions">
+          ${[...leads].reverse().reduce((acc,l)=>{if(l.nextAction&&!acc.includes(l.nextAction))acc.push(l.nextAction);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+        </datalist>
+      </div>
       <div class="form-full"><label class="form-label">Contact information</label><input id="f-contact" value="${ed?ed.contact||"":""}" placeholder="e.g. Dr. Ali — Purchasing manager"/></div>
       <div class="form-full"><label class="form-label">Notes</label><input id="f-notes" value="${ed?ed.notes||"":""}" placeholder="Any additional notes..."/></div>
     </div>
@@ -1191,7 +1285,35 @@ function switchTab(t) { activeTab = t; if (t !== "add") editingId = null; render
 function startEdit(id) { editingId = id; activeTab = "add"; renderApp(); }
 function cancelEdit() { editingId = null; activeTab = "leads"; renderApp(); }
 function setFilter(key, val) { filters[key] = val; renderApp(); }
-function clearFilters() { filters = { name:"", location:"", clientStatus:"", brands:"", mainProduct:"", nextAction:"", status:"", salesman:"" }; renderApp(); }
+
+function toggleFilter(key, val) {
+  if (Array.isArray(filters[key])) {
+    const idx = filters[key].indexOf(val);
+    if (idx === -1) filters[key] = [...filters[key], val];
+    else filters[key] = filters[key].filter(v => v !== val);
+    renderApp();
+  } else {
+    setFilter(key, val);
+  }
+}
+
+function toggleDropdown(id, event) {
+  if (event) event.stopPropagation();
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const isOpen = dd.classList.contains('open');
+  closeAllDropdowns();
+  if (!isOpen) dd.classList.add('open');
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll('.ms-dd.open').forEach(d => d.classList.remove('open'));
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.ms-wrap')) closeAllDropdowns();
+});
+function clearFilters() { filters = { name:"", location:[], clientStatus:[], brands:[], mainProduct:[], nextAction:"", status:[], salesman:[] }; closeAllDropdowns(); renderApp(); }
 
 function previewCity(val) {
   const el = document.getElementById("city-hint");
