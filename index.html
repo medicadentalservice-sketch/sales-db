@@ -939,7 +939,10 @@ function renderAddTab() {
       <div><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
       <div class="form-full">
         <label class="form-label">Location <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— Arabic or English</span></label>
-        <input id="f-location" value="${ed?ed.location||"":""}" placeholder="e.g. جدة - الكورنيش or Riyadh - Olaya" oninput="previewCity(this.value)"/>
+        <input id="f-location" value="${ed?ed.location||"":""}" placeholder="e.g. جدة - الكورنيش or Riyadh - Olaya" oninput="previewCity(this.value)" list="location-suggestions" autocomplete="off"/>
+        <datalist id="location-suggestions">
+          ${[...leads].reverse().reduce((acc,l)=>{if(l.location&&!acc.includes(l.location))acc.push(l.location);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+        </datalist>
         <div class="city-hint" id="city-hint"></div>
       </div>
       <div><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${ed?ed.opened:new Date().toISOString().split("T")[0]}"/></div>
