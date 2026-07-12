@@ -440,7 +440,7 @@ const USERS = [
 
 const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
 const SOURCES = ["Visit","Media","Website","Other"];
-const STATUSES = ["Open","Follow Up","Closed Won","Closed Lost"];
+const STATUSES = ["Quotation","Follow-up","Win","Lose"];
 
 // ─────────────────────────────────────────
 // FUZZY MAPS
@@ -540,10 +540,10 @@ function uidFromName(name) {
 }
 function inferStatus(next) {
   const t = (next || "").toLowerCase();
-  if (t.includes("follow up") || t.includes("متابعة")) return "Follow Up";
-  if (t.includes("closed") || t.includes("won")) return "Closed Won";
-  if (t.includes("lost")) return "Closed Lost";
-  return "Open";
+  if (t.includes("follow up") || t.includes("follow-up") || t.includes("متابعة")) return "Follow-up";
+  if (t.includes("won") || t.includes("win") || t.includes("po")) return "Win";
+  if (t.includes("lost") || t.includes("lose")) return "Lose";
+  return "Quotation";
 }
 function parseSheetDate(str) {
   if (!str) return new Date().toISOString().split("T")[0];
@@ -556,24 +556,30 @@ function getMyLeads() { return currentUser.role === "manager" ? leads : leads.fi
 
 function getTimeBoundary() {
   const now = new Date();
-  if (timePeriod === "week") {
-    const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d;
-  }
-  if (timePeriod === "month") return new Date(now.getFullYear(), now.getMonth(), 1);
-  if (timePeriod === "year")  return new Date(now.getFullYear(), 0, 1);
+  const y = now.getFullYear();
+  if (timePeriod === "Q1") return { start: new Date(y,0,1), end: new Date(y,3,1) };
+  if (timePeriod === "Q2") return { start: new Date(y,3,1), end: new Date(y,6,1) };
+  if (timePeriod === "Q3") return { start: new Date(y,6,1), end: new Date(y,9,1) };
+  if (timePeriod === "Q4") return { start: new Date(y,9,1), end: new Date(y+1,0,1) };
   return null;
 }
 
 function applyTimeFilter(data) {
   const boundary = getTimeBoundary();
   if (!boundary) return data;
-  return data.filter(l => { if (!l.opened) return false; return new Date(l.opened) >= boundary; });
+  return data.filter(l => {
+    if (!l.opened) return false;
+    const d = new Date(l.opened);
+    if (boundary.start) return d >= boundary.start && d < boundary.end;
+    return d >= boundary;
+  });
 }
 
 function getTimePeriodLabel() {
-  if (timePeriod === "week")  return "This Week";
-  if (timePeriod === "month") return "This Month";
-  if (timePeriod === "year")  return "This Year";
+  if (timePeriod === "Q1") return "Q1 (Jan–Mar)";
+  if (timePeriod === "Q2") return "Q2 (Apr–Jun)";
+  if (timePeriod === "Q3") return "Q3 (Jul–Sep)";
+  if (timePeriod === "Q4") return "Q4 (Oct–Dec)";
   return "All Time";
 }
 function applyFilters() {
@@ -592,14 +598,14 @@ function applyFilters() {
 }
 function metrics(data) {
   const total = data.length;
-  const won = data.filter(l => l.status === "Closed Won").length;
+  const won = data.filter(l => l.status === "Win").length;
   const rev = data.filter(l => l.status === "Closed Won").reduce((s,l) => s + Number(l.value||0), 0);
-  const open = data.filter(l => l.status === "Open" || l.status === "Follow Up").length;
+  const open = data.filter(l => l.status === "Quotation" || l.status === "Follow-up").length;
   const rate = total ? Math.round(won/total*100) : 0;
   const avg = won ? Math.round(rev/won) : 0;
   return { total, won, rev, open, rate, avg };
 }
-function badgeClass(s) { return s==="Open"?"b-open":s==="Closed Won"?"b-won":s==="Closed Lost"?"b-lost":"b-follow"; }
+function badgeClass(s) { return s==="Win"?"b-won":s==="Lose"?"b-lost":s==="Quotation"?"b-open":"b-follow"; }
 function getCityCounts(data) {
   const map = {};
   data.forEach(l => { const c = normalizeCity(l.location); map[c] = (map[c]||0)+1; });
@@ -653,6 +659,9 @@ async function loadFromSheet() {
       nextAction: (r.nextAction || r["Next Action?"] || "").trim(),
       contact: (r.contact || r["Contact Information"] || "").trim(),
       notes: "",
+      poDate: r.poDate || "",
+      soDate: r.soDate || "",
+      probability: r.probability || "",
       imported: true,
       timestamp: r.timestamp || r.Timestamp || ""
     }));
@@ -714,7 +723,8 @@ function loadFallbackData() {
     location: r[2], opened: parseSheetDate(r[0]), closed: "", value: 0,
     status: inferStatus(r[6]), brands: parseBrands(r[4]),
     clientStatus: r[8]||"Old", mainProduct: r[5], nextAction: r[6],
-    contact: r[7], notes: "", imported: true, timestamp: r[0]
+    contact: r[7], notes: "", poDate:"", soDate:"", probability:"",
+    imported: true, timestamp: r[0]
   }));
   nextId = 2000 + leads.length + 1;
 }
@@ -742,7 +752,7 @@ function doLogin() {
   if (!user) { errEl.style.display = "block"; return; }
   errEl.style.display = "none";
   currentUser = user;
-  activeTab = "leads";
+  activeTab = "home";
   editingId = null;
   filters = { name:"", location:[], clientStatus:[], brands:[], mainProduct:[], nextAction:"", status:[], salesman:[] };
 
@@ -770,8 +780,13 @@ function signOut() {
 // RENDER
 // ─────────────────────────────────────────
 function renderApp() {
-  renderMetrics();
-  renderTabBar();
+  if (activeTab !== "home") {
+    renderMetrics();
+    renderTabBar();
+  } else {
+    document.getElementById("metrics-row").innerHTML = "";
+    document.getElementById("tab-bar").innerHTML = "";
+  }
   renderTabContent();
 }
 
@@ -792,8 +807,9 @@ function renderMetrics() {
 function renderTabBar() {
   const isManager = currentUser.role === "manager";
   const tabs = [
-    { id:"leads", label:"Accounts" },
-    { id:"add", label: editingId ? "✎ Edit" : "+ Add" },
+    { id:"home",   label:"🏠 Home" },
+    { id:"leads",  label:"Accounts" },
+    { id:"add",    label: editingId ? "✎ Edit" : "+ Add" },
     { id:"charts", label:"Charts" },
   ];
   if (isManager) tabs.push({ id:"team", label:"Team" });
@@ -804,15 +820,79 @@ function renderTabBar() {
 
 function renderTabContent() {
   const el = document.getElementById("tab-content");
-  if (activeTab === "leads") el.innerHTML = renderLeadsTab();
+  if (activeTab === "home") el.innerHTML = renderHomeTab();
+  else if (activeTab === "leads") el.innerHTML = renderLeadsTab();
   else if (activeTab === "add") el.innerHTML = renderAddTab();
   else if (activeTab === "charts") { el.innerHTML = renderChartsTab(); renderCharts(); }
-  else if (activeTab === "team") el.innerHTML = renderTeamTab();
+  else if (activeTab === "team") { el.innerHTML = renderTeamTab(); setTimeout(renderTeamChart, 50); }
 }
 
 // ─────────────────────────────────────────
 // LEADS TAB
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// HOME TAB
+// ─────────────────────────────────────────
+function renderHomeTab() {
+  const isManager = currentUser.role === "manager";
+  const firstName = currentUser.name.split(" ")[1] || currentUser.name.split(" ")[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  const cards = [
+    {
+      id: "leads",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`,
+      title: "Accounts",
+      desc: "View and manage all clinic visits",
+      color: "var(--accent)"
+    },
+    {
+      id: "add",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+      title: "Log a Visit",
+      desc: "Record a new clinic visit",
+      color: "#2ecc71"
+    },
+    {
+      id: "charts",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+      title: "Charts",
+      desc: "Analytics and visual insights",
+      color: "#3498db"
+    },
+    ...(isManager ? [{
+      id: "team",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
+      title: "Team",
+      desc: "Performance and pipeline by salesman",
+      color: "#9b59b6"
+    }] : [])
+  ];
+
+  return `
+  <div style="display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;min-height:60vh;padding:20px;">
+    <div style="margin-bottom:40px;text-align:center;">
+      <div style="font-size:26px;font-weight:600;color:var(--text);margin-bottom:6px;">${greeting}, ${firstName}</div>
+      <div style="font-size:13px;color:var(--text3);">What would you like to do today?</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,220px));gap:16px;max-width:700px;width:100%;-webkit-justify-content:center;justify-content:center;">
+      ${cards.map(c => `
+        <div onclick="switchTab('${c.id}')"
+          style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+                 padding:28px 20px;cursor:pointer;text-align:center;
+                 -webkit-transition:all .18s;transition:all .18s;position:relative;overflow:hidden;"
+          onmouseover="this.style.borderColor='${c.color}';this.style.transform='translateY(-3px)';this.style.background='var(--bg3)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.transform='none';this.style.background='var(--bg2)'">
+          <div style="color:${c.color};margin-bottom:14px;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;">${c.icon}</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">${c.title}</div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.5;">${c.desc}</div>
+        </div>`).join("")}
+    </div>
+  </div>`;
+}
+
 function renderLeadsTab() {
   const isManager = currentUser.role === "manager";
   const myLeads = getMyLeads();
@@ -825,20 +905,25 @@ function renderLeadsTab() {
     filters.brands.length || filters.mainProduct.length ||
     filters.status.length || filters.salesman.length;
 
-  // Helper: build multi-select dropdown
-  function msFilter(key, id, options, labelFn) {
+  function msFilter(key, id, options) {
     const sel = filters[key] || [];
-    const label = sel.length === 0 ? "All" : sel.length === 1 ? (labelFn ? labelFn(sel[0]) : sel[0]) : `${sel.length} selected`;
+    const label = sel.length === 0 ? "All" : sel.length === 1 ? (options.find(o=>(o.val||o)===sel[0])?.lbl||sel[0]) : `${sel.length} selected`;
+    const allOpt = `<label class="ms-opt" style="border-bottom:1px solid var(--border);margin-bottom:2px;">
+      <input type="checkbox" ${sel.length===0?"checked":""} onchange="setFilter('${key}',[]);event.stopPropagation();renderApp();" style="accent-color:var(--accent);"/>
+      <span style="font-weight:600;color:var(--text);">All</span>
+    </label>`;
     const opts = options.map(o => {
       const val = o.val !== undefined ? o.val : o;
       const lbl = o.lbl !== undefined ? o.lbl : o;
       const checked = sel.includes(String(val)) ? "checked" : "";
       return `<label class="ms-opt"><input type="checkbox" value="${val}" ${checked} onchange="toggleFilter('${key}','${val}');event.stopPropagation();"/>${lbl}</label>`;
     }).join("");
-    return `<div class="ms-wrap">
-      <button class="ms-btn ${sel.length > 0 ? "active" : ""}" onclick="toggleDropdown('${id}',event)">${label}</button>
-      <div class="ms-dd" id="${id}">${opts}</div>
-    </div>`;
+    return `<div class="ms-wrap"><button class="ms-btn ${sel.length>0?"active":""}" onclick="toggleDropdown('${id}',event)">${label}</button><div class="ms-dd" id="${id}">${allOpt}${opts}</div></div>`;
+  }
+
+  function fmtMonth(v) {
+    if (!v) return "-";
+    try { const d = new Date(v+"-01"); return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"}); } catch(e) { return v; }
   }
 
   let html = `<div class="table-card">`;
@@ -849,46 +934,27 @@ function renderLeadsTab() {
     </div>`;
   }
 
+  // Column order: By → Account → Location → Client → Status → Prob → Value → PO Date → SO → Brands → Main Product → Next Action → Contact → Date → Actions
   html += `<div class="table-wrap"><table><thead><tr>
-    <th style="min-width:130px;">
-      <span class="col-head">Account</span>
-      <input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/>
-    </th>
-    <th style="min-width:120px;">
-      <span class="col-head">Location</span>
-      ${msFilter('location','dd-location', uniqueCities)}
-    </th>
-    <th style="min-width:90px;">
-      <span class="col-head">Client</span>
-      ${msFilter('clientStatus','dd-client', ['New','Old'])}
-    </th>
-    <th style="min-width:140px;">
-      <span class="col-head">Brands</span>
-      ${msFilter('brands','dd-brands', BRANDS)}
-    </th>
-    <th style="min-width:140px;">
-      <span class="col-head">Main Product</span>
-      ${msFilter('mainProduct','dd-product', uniqueProducts)}
-    </th>
-    <th style="min-width:130px;">
-      <span class="col-head">Next Action</span>
-      <input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/>
-    </th>
+    ${isManager ? `<th style="min-width:120px;"><span class="col-head">By</span>${msFilter('salesman','dd-salesman',salesmen.map(u=>({val:String(u.id),lbl:u.name})))}</th>` : ""}
+    <th style="min-width:130px;"><span class="col-head">Account</span><input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/></th>
+    <th style="min-width:110px;"><span class="col-head">Location</span>${msFilter('location','dd-location',uniqueCities)}</th>
+    <th style="min-width:80px;"><span class="col-head">Client</span>${msFilter('clientStatus','dd-client',['New','Old'])}</th>
+    <th style="min-width:100px;"><span class="col-head">Status</span>${msFilter('status','dd-status',STATUSES)}</th>
+    <th style="min-width:80px;"><span class="col-head">Probability</span></th>
+    <th style="min-width:80px;"><span class="col-head">Value (SAR)</span></th>
+    <th style="min-width:90px;"><span class="col-head">PO Date</span></th>
+    <th style="min-width:90px;"><span class="col-head">SO Date</span></th>
+    <th style="min-width:130px;"><span class="col-head">Brands</span>${msFilter('brands','dd-brands',BRANDS)}</th>
+    <th style="min-width:130px;"><span class="col-head">Main Product</span>${msFilter('mainProduct','dd-product',uniqueProducts)}</th>
+    <th style="min-width:130px;"><span class="col-head">Next Action</span><input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/></th>
     <th style="min-width:110px;"><span class="col-head">Contact</span></th>
-    <th style="min-width:110px;">
-      <span class="col-head">Status</span>
-      ${msFilter('status','dd-status', STATUSES)}
-    </th>
     <th style="min-width:90px;"><span class="col-head">Date</span></th>
-    ${isManager ? `<th style="min-width:130px;">
-      <span class="col-head">By</span>
-      ${msFilter('salesman','dd-salesman', salesmen.map(u => ({val:String(u.id), lbl:u.name})))}
-    </th>` : ""}
     <th style="min-width:90px;"><span class="col-head">Actions</span></th>
   </tr></thead><tbody>`;
 
   if (filtered.length === 0) {
-    html += `<tr class="empty-row"><td colspan="${isManager?12:11}">No accounts match your filters.</td></tr>`;
+    html += `<tr class="empty-row"><td colspan="${isManager?15:14}">No accounts match your filters.</td></tr>`;
   } else {
     filtered.forEach(l => {
       const owner = USERS.find(u => u.id === l.uid);
@@ -897,18 +963,25 @@ function renderLeadsTab() {
       const showCity = l.location && cityNorm !== l.location.trim() && cityNorm !== "Other";
       const prodNorm = normalizeProduct(l.mainProduct);
       const showProd = l.mainProduct && prodNorm !== l.mainProduct.trim();
+      const probColor = !l.probability ? "var(--text3)" :
+        parseInt(l.probability) >= 70 ? "var(--green)" :
+        parseInt(l.probability) >= 40 ? "var(--accent)" : "var(--red)";
       html += `<tr>
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
         <td class="td-wrap">${l.name} <span class="${l.imported?"b-sheet":"b-new-entry"} badge">${l.imported?"sheet":"new"}</span></td>
         <td class="td-wrap">${l.location||"-"}${showCity?`<br><span class="city-pill">${cityNorm}</span>`:""}</td>
         <td><span class="badge ${l.clientStatus==="New"?"b-new":"b-old"}">${l.clientStatus||"-"}</span></td>
+        <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
+        <td style="font-size:12px;font-weight:600;color:${probColor};">${l.probability||"-"}</td>
+        <td style="font-size:11px;">${l.value?Number(l.value).toLocaleString():"-"}</td>
+        <td style="font-size:11px;">${fmtMonth(l.poDate)}</td>
+        <td style="font-size:11px;">${fmtMonth(l.soDate)}</td>
         <td class="td-wrap">${brandPills||"-"}</td>
         <td class="td-wrap" style="font-size:11px;">${l.mainProduct||"-"}${showProd?`<br><span class="prod-pill">${prodNorm}</span>`:""}</td>
         <td class="td-wrap" style="font-size:11px;">${l.nextAction||"-"}</td>
-        <td class="td-nowrap" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${l.contact||""}">${l.contact||"-"}</td>
-        <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
-        <td class="td-nowrap" style="font-size:11px;">${l.opened||"-"}</td>
-        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
-        <td class="td-nowrap">
+        <td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.contact||""}">${l.contact||"-"}</td>
+        <td style="font-size:11px;white-space:nowrap;">${l.opened||"-"}</td>
+        <td style="white-space:nowrap;">
           <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
           ${isManager ? ` <button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Del</button>` : ""}
         </td>
@@ -919,24 +992,27 @@ function renderLeadsTab() {
   return html;
 }
 
-// ─────────────────────────────────────────
-// ADD/EDIT TAB
-// ─────────────────────────────────────────
 function renderAddTab() {
   const ed = editingId ? leads.find(l => l.id === editingId) : null;
   const selBrands = ed ? (ed.brands || []) : [];
+  const probOptions = ["10%","20%","30%","40%","50%","60%","70%","80%","90%","100%"];
+
+  function fmtMonth(v) { return v||""; }
+
   return `<div class="form-card">
     <div class="form-title">${ed ? "✎ Edit Account" : "＋ Add New Account"}</div>
     <div class="form-grid">
-      <div class="form-full">
-        <label class="form-label">Account name *</label>
+
+      <div class="form-full"><label class="form-label">Account name *</label>
         <input id="f-name" value="${ed?ed.name:""}" placeholder="e.g. Dr. Ahmed Clinic" list="account-suggestions" autocomplete="off"/>
         <datalist id="account-suggestions">
           ${[...leads].reverse().reduce((acc,l)=>{if(l.name&&!acc.includes(l.name))acc.push(l.name);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
         </datalist>
       </div>
-      <div><label class="form-label">Phone</label><input id="f-phone" value="${ed?ed.phone||"":""}" placeholder="05XXXXXXXX"/></div>
-      <div><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
+
+      <div class="form-col"><label class="form-label">Phone</label><input id="f-phone" value="${ed?ed.phone||"":""}" placeholder="05XXXXXXXX"/></div>
+      <div class="form-col"><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
+
       <div class="form-full">
         <label class="form-label">Location <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— Arabic or English</span></label>
         <input id="f-location" value="${ed?ed.location||"":""}" placeholder="e.g. جدة - الكورنيش or Riyadh - Olaya" oninput="previewCity(this.value)" list="location-suggestions" autocomplete="off"/>
@@ -945,23 +1021,37 @@ function renderAddTab() {
         </datalist>
         <div class="city-hint" id="city-hint"></div>
       </div>
-      <div><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${ed?ed.opened:new Date().toISOString().split("T")[0]}"/></div>
-      <div><label class="form-label">Client status</label><select id="f-cstatus"><option ${!ed||ed.clientStatus==="New"?"selected":""}>New</option><option ${ed&&ed.clientStatus==="Old"?"selected":""}>Old</option></select></div>
-      <div><label class="form-label">Deal value (SAR)</label><input type="number" id="f-value" value="${ed?ed.value||"":""}" placeholder="0"/></div>
-      <div><label class="form-label">Pipeline status</label><select id="f-status">${STATUSES.map(s=>`<option ${ed&&ed.status===s?"selected":""}>${s}</option>`).join("")}</select></div>
+
+      <div class="form-col"><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${ed?ed.opened:new Date().toISOString().split("T")[0]}"/></div>
+      <div class="form-col"><label class="form-label">Client status</label><select id="f-cstatus"><option ${!ed||ed.clientStatus==="New"?"selected":""}>New</option><option ${ed&&ed.clientStatus==="Old"?"selected":""}>Old</option></select></div>
+
+      <div class="form-col"><label class="form-label">Pipeline status</label>
+        <select id="f-status">${STATUSES.map(s=>`<option ${ed&&ed.status===s?"selected":""}>${s}</option>`).join("")}</select>
+      </div>
+      <div class="form-col"><label class="form-label">Probability</label>
+        <select id="f-probability"><option value="">— select —</option>${probOptions.map(p=>`<option ${ed&&ed.probability===p?"selected":""}>${p}</option>`).join("")}</select>
+      </div>
+
+      <div class="form-col"><label class="form-label">Deal value (SAR)</label><input type="number" id="f-value" value="${ed?ed.value||"":""}" placeholder="0"/></div>
+      <div class="form-col"><label class="form-label">PO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">(month)</span></label>
+        <input type="month" id="f-podate" value="${ed?ed.poDate||"":""}" />
+      </div>
+      <div class="form-col"><label class="form-label">SO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">(month)</span></label>
+        <input type="month" id="f-sodate" value="${ed?ed.soDate||"":""}" />
+      </div>
+
       <div class="form-full">
         <label class="form-label" style="margin-bottom:8px;">Brands discussed</label>
         <div class="brand-grid">${BRANDS.map(b=>`<label class="brand-check"><input type="checkbox" value="${b}" ${selBrands.includes(b)?"checked":""}/>${b}</label>`).join("")}</div>
       </div>
-      <div class="form-full">
-        <label class="form-label">Main product of visit</label>
+
+      <div class="form-full"><label class="form-label">Main product of visit</label>
         <input id="f-mainprod" value="${ed?ed.mainProduct||"":""}" placeholder="e.g. Planmeca unit, Bisco samples" list="mainprod-suggestions" autocomplete="off"/>
         <datalist id="mainprod-suggestions">
           ${[...leads].reverse().reduce((acc,l)=>{if(l.mainProduct&&!acc.includes(l.mainProduct))acc.push(l.mainProduct);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
         </datalist>
       </div>
-      <div class="form-full">
-        <label class="form-label">Next action</label>
+      <div class="form-full"><label class="form-label">Next action</label>
         <input id="f-nextaction" value="${ed?ed.nextAction||"":""}" placeholder="e.g. Send quotation, Follow up Thursday" list="nextaction-suggestions" autocomplete="off"/>
         <datalist id="nextaction-suggestions">
           ${[...leads].reverse().reduce((acc,l)=>{if(l.nextAction&&!acc.includes(l.nextAction))acc.push(l.nextAction);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
@@ -983,7 +1073,7 @@ function renderAddTab() {
 
 // Chart selection state — null = no filter active for that dimension
 let chartSel = { city:null, product:null, brand:null, status:null, clientStatus:null, source:null };
-let timePeriod = "all"; // all | week | month | year
+let timePeriod = "all"; // all | Q1 | Q2 | Q3 | Q4
 let chartInstances = {};
 
 function chartFilteredLeads() {
@@ -1065,7 +1155,7 @@ function refreshAllCharts() {
   // Status
   if (chartInstances.status) {
     chartInstances.status.data.datasets[0].data = STATUSES.map(s => d.filter(l=>l.status===s).length);
-    const statusClrs = ["#f0a500","#3498db","#2ecc71","#e74c3c"];
+    const statusClrs = ["#f0a500","#3498db","#2ecc71","#e74c3c"]; // Quotation, Follow-up, Win, Lose
     chartInstances.status.data.datasets[0].backgroundColor = STATUSES.map((s,i) => dimAlpha("status", s, statusClrs[i]));
     chartInstances.status.update();
   }
@@ -1101,9 +1191,9 @@ function renderChartsTab() {
   return `
   <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Period:</span>
-    ${["all","week","month","year"].map(p=>`
+    ${["all","Q1","Q2","Q3","Q4"].map(p=>`
       <button onclick="setTimePeriod('${p}')" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${timePeriod===p?"var(--accent)":"var(--border)"};background:${timePeriod===p?"var(--accent)":"transparent"};color:${timePeriod===p?"#000":"var(--text2)"};-webkit-appearance:none;appearance:none;">
-        ${{all:"All time",week:"This week",month:"This month",year:"This year"}[p]}
+        ${{all:"All",Q1:"Q1 Jan–Mar",Q2:"Q2 Apr–Jun",Q3:"Q3 Jul–Sep",Q4:"Q4 Oct–Dec"}[p]}
       </button>`).join("")}
     <span style="margin-left:auto;font-size:11px;color:var(--text3);">${d.length} visit${d.length!==1?"s":""} in period</span>
   </div>
@@ -1236,40 +1326,126 @@ function renderCharts() {
 // TEAM TAB
 // ─────────────────────────────────────────
 function renderTeamTab() {
-  const tLeads = applyTimeFilter(leads);
-  const timeBtns = ["all","week","month","year"].map(p=>`
-    <button onclick="setTimePeriod('${p}')" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${timePeriod===p?'var(--accent)':'var(--border)'};background:${timePeriod===p?'var(--accent)':'transparent'};color:${timePeriod===p?'#000':'var(--text2)'};-webkit-appearance:none;appearance:none;">${{all:'All time',week:'This week',month:'This month',year:'This year'}[p]}</button>`).join('');
-  let html = `
-  <div style="display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Period:</span>
-    ${timeBtns}
-    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${tLeads.length} visit${tLeads.length!==1?'s':''} — ${getTimePeriodLabel()}</span>
-  </div>
-  <div class="team-card"><div class="team-header">Team Performance — ${getTimePeriodLabel()}</div>
-  <div class="table-wrap"><table><thead><tr>
-    <th><span class="col-head">Salesman</span></th>
-    <th style="width:15%;"><span class="col-head">Accounts</span></th>
-    <th style="width:12%;"><span class="col-head">Won</span></th>
-    <th style="width:15%;"><span class="col-head">Close Rate</span></th>
-    <th style="width:15%;"><span class="col-head">Revenue (SAR)</span></th>
-    <th style="width:13%;"><span class="col-head">Active</span></th>
-  </tr></thead><tbody>`;
-  USERS.filter(u => u.role === "salesman").forEach(u => {
-    const ul = applyTimeFilter(leads).filter(l => l.uid === u.id);
-    const m = metrics(ul);
-    html += `<tr>
-      <td><div style="display:flex;align-items:center;gap:10px;">
-        <div class="sal-badge" style="width:30px;height:30px;font-size:11px;">${u.initials}</div>
-        <div><div style="font-weight:500;">${u.name}</div><div style="font-size:11px;color:var(--text3);">${ul.length} total</div></div>
-      </div></td>
-      <td style="font-family:var(--mono);font-size:13px;">${m.total}</td>
-      <td style="font-family:var(--mono);font-size:13px;">${m.won}</td>
-      <td><span class="badge ${m.rate>=50?"b-won":m.rate>=30?"b-follow":"b-lost"}">${m.rate}%</span></td>
-      <td style="font-family:var(--mono);font-size:13px;">${m.rev.toLocaleString()}</td>
-      <td style="font-family:var(--mono);font-size:13px;">${m.open}</td>
-    </tr>`;
+  // Quarter helpers
+  function getQuarter(dateStr) {
+    if (!dateStr) return null;
+    const m = new Date(dateStr).getMonth() + 1;
+    return m <= 3 ? "Q1" : m <= 6 ? "Q2" : m <= 9 ? "Q3" : "Q4";
+  }
+  function quarterLeads(data, q) {
+    if (!q || q === "All") return data;
+    return data.filter(l => getQuarter(l.opened) === q);
+  }
+  function fmtMonth(v) {
+    if (!v) return "-";
+    try { const d = new Date(v+"-01"); return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"}); } catch(e) { return v; }
+  }
+
+  // Read current filter state from DOM if available (persisted via teamFilters global)
+  const qSel = window._teamQ || "All";
+  const sSel = window._teamS || "All";
+
+  const salesmen = USERS.filter(u => u.role === "salesman");
+  let base = leads;
+  if (sSel !== "All") base = base.filter(l => String(l.uid) === sSel);
+  const filtered = quarterLeads(base, qSel);
+
+  const QUARTERS = ["Q1","Q2","Q3","Q4"];
+
+  // Stacked bar data per quarter
+  const qData = QUARTERS.map(q => {
+    const ql = quarterLeads(base, q);
+    return {
+      q,
+      win:   ql.filter(l=>l.status==="Win").reduce((s,l)=>s+Number(l.value||0),0),
+      lose:  ql.filter(l=>l.status==="Lose").reduce((s,l)=>s+Number(l.value||0),0),
+      quot:  ql.filter(l=>l.status==="Quotation"||l.status==="Follow-up").reduce((s,l)=>s+Number(l.value||0),0),
+      winC:  ql.filter(l=>l.status==="Win").length,
+      loseC: ql.filter(l=>l.status==="Lose").length,
+      quotC: ql.filter(l=>l.status==="Quotation"||l.status==="Follow-up").length,
+    };
   });
-  html += `</tbody></table></div></div>`;
+
+  let html = `
+  <div style="display:-webkit-flex;display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">Quarter:</span>
+    ${["All","Q1","Q2","Q3","Q4"].map(q=>`
+      <button onclick="window._teamQ='${q}';renderApp()" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;
+        border:1px solid ${qSel===q?"var(--accent)":"var(--border)"};
+        background:${qSel===q?"var(--accent)":"transparent"};
+        color:${qSel===q?"#000":"var(--text2)"};
+        -webkit-appearance:none;appearance:none;">${q}</button>`).join("")}
+    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-left:12px;">Salesman:</span>
+    <select onchange="window._teamS=this.value;renderApp()" style="width:auto;font-size:13px;padding:5px 28px 5px 10px;">
+      <option value="All" ${sSel==="All"?"selected":""}>All</option>
+      ${salesmen.map(u=>`<option value="${u.id}" ${sSel===String(u.id)?"selected":""}>${u.name}</option>`).join("")}
+    </select>
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${filtered.length} account${filtered.length!==1?"s":""}</span>
+  </div>
+
+  <div class="team-card" style="margin-bottom:16px;">
+    <div class="team-header">Pipeline — ${qSel==="All"?"All Quarters":qSel} ${sSel!=="All"?("· "+USERS.find(u=>String(u.id)===sSel)?.name||""):""}</div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th style="min-width:130px;"><span class="col-head">Clinic Name</span></th>
+        <th style="min-width:100px;"><span class="col-head">Location</span></th>
+        <th style="min-width:90px;"><span class="col-head">Status</span></th>
+        <th style="min-width:80px;"><span class="col-head">PO Date</span></th>
+        <th style="min-width:80px;"><span class="col-head">SO Date</span></th>
+        <th style="min-width:90px;"><span class="col-head">Value (SAR)</span></th>
+        <th style="min-width:70px;"><span class="col-head">Probability</span></th>
+        ${sSel==="All"?`<th style="min-width:110px;"><span class="col-head">Salesman</span></th>`:""}
+      </tr></thead>
+      <tbody>`;
+
+  if (filtered.length === 0) {
+    html += `<tr class="empty-row"><td colspan="${sSel==="All"?8:7}">No accounts for this selection.</td></tr>`;
+  } else {
+    filtered.forEach(l => {
+      const owner = USERS.find(u => u.id === l.uid);
+      const probColor = !l.probability ? "var(--text3)" :
+        parseInt(l.probability) >= 70 ? "var(--green)" :
+        parseInt(l.probability) >= 40 ? "var(--accent)" : "var(--red)";
+      html += `<tr>
+        <td class="td-wrap" style="font-weight:500;">${l.name}</td>
+        <td style="font-size:11px;">${normalizeCity(l.location)||"-"}</td>
+        <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
+        <td style="font-size:11px;">${fmtMonth(l.poDate)}</td>
+        <td style="font-size:11px;">${fmtMonth(l.soDate)}</td>
+        <td style="font-size:12px;font-weight:600;">${l.value?Number(l.value).toLocaleString():"-"}</td>
+        <td style="font-size:12px;font-weight:600;color:${probColor};">${l.probability||"-"}</td>
+        ${sSel==="All"?`<td style="font-size:11px;color:var(--text2);">${owner?owner.name:"?"}</td>`:""}
+      </tr>`;
+    });
+  }
+
+  html += `</tbody></table></div></div>
+
+  <div class="chart-card" style="-webkit-flex:1 1 100%;flex:1 1 100%;">
+    <div class="chart-title">Pipeline by Quarter</div>
+    <div class="chart-sub">Value (SAR) — 🟢 Win &nbsp; 🔴 Lose &nbsp; 🟠 Quotation / Follow-up</div>
+    <div class="chart-wrap" style="height:280px;"><canvas id="team-quarter-chart"></canvas></div>
+  </div>`;
+
+  // Summary row
+  const totWin  = filtered.filter(l=>l.status==="Win").reduce((s,l)=>s+Number(l.value||0),0);
+  const totLose = filtered.filter(l=>l.status==="Lose").reduce((s,l)=>s+Number(l.value||0),0);
+  const totPipe = filtered.filter(l=>l.status==="Quotation"||l.status==="Follow-up").reduce((s,l)=>s+Number(l.value||0),0);
+  html += `
+  <div style="display:-webkit-flex;display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--green);">
+      <div class="metric-label">Won Value</div><div class="metric-value" style="color:var(--green);">﷼${totWin.toLocaleString()}</div></div>
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--red);">
+      <div class="metric-label">Lost Value</div><div class="metric-value" style="color:var(--red);">﷼${totLose.toLocaleString()}</div></div>
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--accent);">
+      <div class="metric-label">Pipeline Value</div><div class="metric-value">﷼${totPipe.toLocaleString()}</div></div>
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--blue);">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-value">${filtered.length?Math.round(filtered.filter(l=>l.status==="Win").length/filtered.length*100):0}%</div></div>
+  </div>`;
+
+  // Store qData for chart rendering
+  window._qData = qData;
   return html;
 }
 
@@ -1347,6 +1523,9 @@ async function saveLead() {
     nextAction: document.getElementById("f-nextaction").value.trim(),
     contact: document.getElementById("f-contact").value.trim(),
     notes: document.getElementById("f-notes").value.trim(),
+    poDate: document.getElementById("f-podate")?.value || "",
+    soDate: document.getElementById("f-sodate")?.value || "",
+    probability: document.getElementById("f-probability")?.value || "",
     uid,
     salesman: salesman ? salesman.name : "",
     imported: false
@@ -1356,7 +1535,7 @@ async function saveLead() {
     const ts = leads[idx].timestamp || "";
     leads[idx] = { ...leads[idx], ...data };
     editingId = null;
-    await saveToSheet("edit", { ...data, timestamp: ts, brands: checked.join(", ") });
+    await saveToSheet("edit", { ...data, timestamp: ts, brands: checked.join(", "), poDate:data.poDate, soDate:data.soDate, probability:data.probability });
   } else {
     leads.push({ id: nextId++, closed: "", timestamp: "", ...data });
     await saveToSheet("add", { ...data, brands: checked.join(", ") });
@@ -1369,6 +1548,111 @@ async function deleteLead(id) {
   if (!confirm("Remove this account?")) return;
   leads = leads.filter(l => l.id !== id);
   renderApp();
+}
+
+// ─────────────────────────────────────────
+// TEAM CHART
+// ─────────────────────────────────────────
+function renderTeamChart() {
+  const canvas = document.getElementById("team-quarter-chart");
+  if (!canvas) return;
+  const qData = window._qData || [];
+  if (window._teamChartInst) { window._teamChartInst.destroy(); }
+
+  // Custom plugin: draw values INSIDE each bar
+  const insideLabelsPlugin = {
+    id: "insideLabels",
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      chart.data.datasets.forEach((ds, dsIdx) => {
+        const meta = chart.getDatasetMeta(dsIdx);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, idx) => {
+          const val = ds.data[idx];
+          if (!val || val === 0) return;
+          const isValue = ds.label === "Value (SAR)";
+          const label = isValue ? "﷼" + Number(val).toLocaleString() : String(val);
+          const barH = Math.abs(bar.height || (bar.base - bar.y));
+          if (barH < 14) return; // too small to label
+          ctx.save();
+          ctx.fillStyle = "#fff";
+          ctx.font = `bold ${isValue ? 10 : 12}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, bar.x, bar.y + barH / 2);
+          ctx.restore();
+        });
+      });
+    }
+  };
+
+  // For value bars use secondary Y axis (right) since scale differs from counts
+  window._teamChartInst = new Chart(canvas, {
+    type: "bar",
+    plugins: [insideLabelsPlugin],
+    data: {
+      labels: qData.map(d => d.q),
+      datasets: [
+        {
+          label: "Win",
+          data: qData.map(d => d.winC),
+          backgroundColor: "rgba(46,204,113,.80)",
+          borderRadius: 4,
+          yAxisID: "yCount"
+        },
+        {
+          label: "Lost",
+          data: qData.map(d => d.loseC),
+          backgroundColor: "rgba(231,76,60,.80)",
+          borderRadius: 4,
+          yAxisID: "yCount"
+        },
+        {
+          label: "Value (SAR)",
+          data: qData.map(d => d.win + d.lose + d.quot),
+          backgroundColor: "rgba(240,165,0,.80)",
+          borderRadius: 4,
+          yAxisID: "yValue"
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { color:"#9aa0b0", font:{size:12}, padding:16 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              if (ctx.dataset.label === "Value (SAR)") return ` Total Value: ﷼${Number(ctx.parsed.y).toLocaleString()}`;
+              return ` ${ctx.dataset.label}: ${ctx.parsed.y} deal${ctx.parsed.y!==1?"s":""}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color:"#9aa0b0", font:{size:13, weight:"bold"} },
+          grid: { display:false }
+        },
+        yCount: {
+          type: "linear",
+          position: "left",
+          beginAtZero: true,
+          display: false  // ← Y axis hidden
+        },
+        yValue: {
+          type: "linear",
+          position: "right",
+          beginAtZero: true,
+          display: false  // ← Y axis hidden
+        }
+      }
+    }
+  });
 }
 
 // ─────────────────────────────────────────
