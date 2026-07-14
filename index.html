@@ -438,6 +438,23 @@ const USERS = [
   { id:5, name:"Munadel Yassine", role:"salesman",  pass:"4321",initials:"MY" },
 ];
 
+const REFERENCE_DOCS = [
+  {
+    title: "MDMA",
+    desc: "Manufacturer documentation & certificates",
+    url: "https://medicagroup-my.sharepoint.com/:f:/g/personal/abdulaziz_alshathri_mcs-saudi_com/IgDGAJB8tf_gT670BPteFzXJAaPLOYzq61oClixsABMo6O8?e=WmXhtr",
+    color: "#3498db",
+    icon: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>`
+  },
+  {
+    title: "Products Brochure",
+    desc: "Brand catalogues — Planmeca, Bisco, CJ Optic and more",
+    url: "https://medicagroup-my.sharepoint.com/:f:/g/personal/abdulaziz_alshathri_mcs-saudi_com/IgDyc6GfHESJQLJNSWISzOFaAVPpzVddRPQRyydmOjM3g9w?e=Q31kx1",
+    color: "#e67e22",
+    icon: `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`
+  }
+];
+
 const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
 const SOURCES = ["Visit","Media","Website","Other"];
 const STATUSES = ["Quotation","Follow-up","Win","Lose"];
@@ -889,6 +906,24 @@ function renderHomeTab() {
           <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">${c.title}</div>
           <div style="font-size:12px;color:var(--text3);line-height:1.5;">${c.desc}</div>
         </div>`).join("")}
+    </div>
+
+    <!-- Reference Documents -->
+    <div style="margin-top:36px;width:100%;max-width:700px;">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;text-align:center;">Reference Documents</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,220px));gap:16px;-webkit-justify-content:center;justify-content:center;">
+        ${REFERENCE_DOCS.map(d => `
+          <a href="${d.url}" target="_blank" rel="noopener noreferrer"
+            style="text-decoration:none;background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+                   padding:22px 18px;cursor:pointer;text-align:center;display:block;
+                   -webkit-transition:all .18s;transition:all .18s;"
+            onmouseover="this.style.borderColor='${d.color}';this.style.transform='translateY(-3px)';this.style.background='var(--bg3)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.transform='none';this.style.background='var(--bg2)'">
+            <div style="color:${d.color};margin-bottom:10px;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;">${d.icon}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">${d.title}</div>
+            <div style="font-size:11px;color:var(--text3);">${d.desc}</div>
+          </a>`).join("")}
+      </div>
     </div>
   </div>`;
 }
