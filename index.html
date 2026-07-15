@@ -469,6 +469,20 @@ const REFERENCE_DOCS = [
 const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
 const SOURCES = ["Visit","Media","Website","Other"];
 const STATUSES = ["Quotation","Follow-up","Win","Lose"];
+const ACTIVE_STATUSES = ["Quotation","Follow-up"]; // The Funnel
+const TEAM_TARGET_MONTHLY = 500000; // SAR — monthly team target
+const SO_QUARTERS = ["Q1","Q2","Q3","Q4"];
+
+function quarterOfDate(dateStr) {
+  if (!dateStr) return null;
+  const m = new Date(dateStr).getMonth() + 1;
+  return m <= 3 ? "Q1" : m <= 6 ? "Q2" : m <= 9 ? "Q3" : "Q4";
+}
+function monthKeyOfDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
 
 // ─────────────────────────────────────────
 // FUZZY MAPS
@@ -538,7 +552,8 @@ let leads = [];
 let nextId = 5000;
 let currentUser = null;
 let editingId = null;
-let activeTab = "leads";
+let activeTab = "home";
+let returnTab = "leads"; // where Edit/Cancel returns to
 let syncing = false;
 let lastSync = null;
 let saveMsg = { text: "", type: "" };
@@ -646,7 +661,7 @@ function applyFilters() {
 function metrics(data) {
   const total = data.length;
   const won = data.filter(l => l.status === "Win").length;
-  const rev = data.filter(l => l.status === "Closed Won").reduce((s,l) => s + Number(l.value||0), 0);
+  const rev = data.filter(l => l.status === "Win").reduce((s,l) => s + Number(l.value||0), 0);
   const open = data.filter(l => l.status === "Quotation" || l.status === "Follow-up").length;
   const rate = total ? Math.round(won/total*100) : 0;
   const avg = won ? Math.round(rev/won) : 0;
@@ -854,12 +869,15 @@ function renderMetrics() {
 function renderTabBar() {
   const isManager = currentUser.role === "manager";
   const tabs = [
-    { id:"home",   label:"🏠 Home" },
-    { id:"leads",  label:"Accounts" },
-    { id:"add",    label: editingId ? "✎ Edit" : "+ Add" },
-    { id:"charts", label:"Charts" },
+    { id:"home",     label:"🏠 Home" },
+    { id:"logvisit", label:"📝 Log Visit" },
+    { id:"funnel",   label:"📊 Active Funnel" },
+    { id:"won",      label:"🎯 Won Targets" },
+    { id:"leads",    label:"📋 All Accounts" },
+    { id:"charts",   label:"📈 Charts" },
   ];
-  if (isManager) tabs.push({ id:"team", label:"Team" });
+  if (isManager) tabs.push({ id:"team", label:"👥 Team" });
+  // "add" (edit view) is intentionally not a nav tab — reached only via Edit buttons
   document.getElementById("tab-bar").innerHTML = tabs.map(t =>
     `<button class="tab-btn ${activeTab===t.id?"active":""}" onclick="switchTab('${t.id}')">${t.label}</button>`
   ).join("");
@@ -868,6 +886,9 @@ function renderTabBar() {
 function renderTabContent() {
   const el = document.getElementById("tab-content");
   if (activeTab === "home") el.innerHTML = renderHomeTab();
+  else if (activeTab === "logvisit") el.innerHTML = renderLogVisitTab();
+  else if (activeTab === "funnel") el.innerHTML = renderFunnelTab();
+  else if (activeTab === "won") el.innerHTML = renderWonTargetsTab();
   else if (activeTab === "leads") el.innerHTML = renderLeadsTab();
   else if (activeTab === "add") el.innerHTML = renderAddTab();
   else if (activeTab === "charts") { el.innerHTML = renderChartsTab(); renderCharts(); }
@@ -886,42 +907,76 @@ function renderHomeTab() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  // ── Goal Gradient: never start at 0% — baseline is a completed "check-in" ──
+  const todayStr = new Date().toISOString().split("T")[0];
+  const loggedToday = getMyLeads().filter(l => l.opened === todayStr).length;
+  let momentumPct = 20;
+  let momentumMsg = "20% — Daily Check-in Complete";
+  if (loggedToday >= 1) { momentumPct = 55; momentumMsg = `${loggedToday} visit${loggedToday>1?"s":""} logged today — keep going!`; }
+  if (loggedToday >= 2) { momentumPct = 75; momentumMsg = `Great pace — ${loggedToday} visits logged today`; }
+  if (loggedToday >= 3) { momentumPct = 100; momentumMsg = `Daily goal reached — ${loggedToday} visits logged 🎉`; }
+
   const cards = [
+    {
+      id: "logvisit",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+      title: "Log a Visit",
+      desc: "Quick daily entry — the essentials only",
+      color: "#2ecc71"
+    },
+    {
+      id: "funnel",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
+      title: "Active Funnel",
+      desc: "Quotation & Follow-up accounts in play",
+      color: "#3498db"
+    },
+    {
+      id: "won",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/></svg>`,
+      title: "Won Targets",
+      desc: "Revenue target tracker & wins wall",
+      color: "#2ecc71"
+    },
     {
       id: "leads",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`,
-      title: "Accounts",
-      desc: "View and manage all clinic visits",
+      title: "All Accounts",
+      desc: "Full table — every status, every visit",
       color: "var(--accent)"
-    },
-    {
-      id: "add",
-      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
-      title: "Log a Visit",
-      desc: "Record a new clinic visit",
-      color: "#2ecc71"
     },
     {
       id: "charts",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
       title: "Charts",
       desc: "Analytics and visual insights",
-      color: "#3498db"
+      color: "#9b59b6"
     },
     ...(isManager ? [{
       id: "team",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
       title: "Team",
       desc: "Performance and pipeline by salesman",
-      color: "#9b59b6"
+      color: "#e67e22"
     }] : [])
   ];
 
   return `
   <div style="display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;min-height:60vh;padding:20px;">
-    <div style="margin-bottom:40px;text-align:center;">
+    <div style="margin-bottom:28px;text-align:center;">
       <div style="font-size:26px;font-weight:600;color:var(--text);margin-bottom:6px;">${greeting}, ${firstName}</div>
       <div style="font-size:13px;color:var(--text3);">What would you like to do today?</div>
+    </div>
+
+    <div style="width:100%;max-width:420px;margin-bottom:36px;">
+      <div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;align-items:baseline;margin-bottom:7px;">
+        <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Daily Momentum</span>
+        <span style="font-size:12px;color:var(--accent);font-weight:600;">${momentumPct}%</span>
+      </div>
+      <div style="height:8px;background:var(--bg3);border-radius:20px;overflow:hidden;border:1px solid var(--border);">
+        <div style="height:100%;width:${momentumPct}%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:20px;-webkit-transition:width .5s ease;transition:width .5s ease;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center;">${momentumMsg}</div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,220px));gap:16px;max-width:700px;width:100%;-webkit-justify-content:center;justify-content:center;">
@@ -988,7 +1043,10 @@ function renderLeadsTab() {
 
   function fmtMonth(v) {
     if (!v) return "-";
-    try { const d = new Date(v+"-01"); return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"}); } catch(e) { return v; }
+    if (/^Q[1-4]$/.test(v)) return v;
+    const d = new Date(v+"-01");
+    if (isNaN(d.getTime())) return v;
+    return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"});
   }
 
   let html = `<div class="table-card">`;
@@ -1009,7 +1067,7 @@ function renderLeadsTab() {
     <th style="min-width:80px;"><span class="col-head">Probability</span></th>
     <th style="min-width:80px;"><span class="col-head">Value (SAR)</span></th>
     <th style="min-width:90px;"><span class="col-head">PO Date</span></th>
-    <th style="min-width:90px;"><span class="col-head">SO Date</span></th>
+    <th style="min-width:90px;"><span class="col-head">Expected SO Qtr</span></th>
     <th style="min-width:130px;"><span class="col-head">Brands</span>${msFilter('brands','dd-brands',BRANDS)}</th>
     <th style="min-width:130px;"><span class="col-head">Main Product</span>${msFilter('mainProduct','dd-product',uniqueProducts)}</th>
     <th style="min-width:130px;"><span class="col-head">Next Action</span><input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/></th>
@@ -1057,6 +1115,77 @@ function renderLeadsTab() {
   return html;
 }
 
+// ─────────────────────────────────────────
+// LOG VISIT TAB — minimal daily-log entry
+// ─────────────────────────────────────────
+function renderLogVisitTab() {
+  editingId = null; // Log Visit is always a fresh entry, never an edit
+  return `<div class="form-card">
+    <div class="form-title">📝 Log a Visit</div>
+    <div style="font-size:12px;color:var(--text3);margin:-10px 0 18px;">Daily logging — no deal value, probability, or pipeline status here. Saves straight into the Active Funnel as <b style="color:var(--accent);">Quotation</b>.</div>
+
+    <div class="form-section">
+      <div class="form-grid">
+        <div class="form-full"><label class="form-label">Account name *</label>
+          <input id="f-name" value="" placeholder="e.g. Dr. Ahmed Clinic" list="account-suggestions" autocomplete="off"/>
+          <datalist id="account-suggestions">
+            ${[...leads].reverse().reduce((acc,l)=>{if(l.name&&!acc.includes(l.name))acc.push(l.name);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+          </datalist>
+        </div>
+
+        <div class="form-col"><label class="form-label">Phone</label><input id="f-phone" value="" placeholder="05XXXXXXXX"/></div>
+        <div class="form-col"><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option>${s}</option>`).join("")}</select></div>
+
+        <div class="form-full">
+          <label class="form-label">Location <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— Arabic or English</span></label>
+          <input id="f-location" value="" placeholder="e.g. جدة - الكورنيش or Riyadh - Olaya" oninput="previewCity(this.value)" list="location-suggestions" autocomplete="off"/>
+          <datalist id="location-suggestions">
+            ${[...leads].reverse().reduce((acc,l)=>{if(l.location&&!acc.includes(l.location))acc.push(l.location);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+          </datalist>
+          <div class="city-hint" id="city-hint"></div>
+        </div>
+
+        <div class="form-col"><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${new Date().toISOString().split("T")[0]}"/></div>
+        <div class="form-col"><label class="form-label">Client status</label><select id="f-cstatus"><option selected>New</option><option>Old</option></select></div>
+
+        <div class="form-full">
+          <label class="form-label" style="margin-bottom:8px;">Brands discussed</label>
+          <div class="brand-grid" id="brand-pill-grid">
+            ${BRANDS.map(b=>`
+              <div class="brand-pill-btn" data-brand="${b}" onclick="toggleBrandPill(this,'${b}')">
+                <span class="pill-check"></span>
+                <input type="checkbox" value="${b}"/>
+                <span>${b}</span>
+              </div>`).join("")}
+          </div>
+        </div>
+
+        <div class="form-full"><label class="form-label">Main product of visit</label>
+          <input id="f-mainprod" value="" placeholder="e.g. Planmeca unit, Bisco samples" list="mainprod-suggestions" autocomplete="off"/>
+          <datalist id="mainprod-suggestions">
+            ${[...leads].reverse().reduce((acc,l)=>{if(l.mainProduct&&!acc.includes(l.mainProduct))acc.push(l.mainProduct);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+          </datalist>
+        </div>
+
+        <div class="form-full"><label class="form-label">Next action</label>
+          <input id="f-nextaction" value="" placeholder="e.g. Send quotation, Follow up Thursday" list="nextaction-suggestions" autocomplete="off"/>
+          <datalist id="nextaction-suggestions">
+            ${[...leads].reverse().reduce((acc,l)=>{if(l.nextAction&&!acc.includes(l.nextAction))acc.push(l.nextAction);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
+          </datalist>
+        </div>
+
+        <div class="form-full"><label class="form-label">Contact information</label><input id="f-contact" value="" placeholder="e.g. Dr. Ali — Purchasing manager"/></div>
+        <div class="form-full"><label class="form-label">Notes</label><input id="f-notes" value="" placeholder="Any additional notes..."/></div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn" onclick="switchTab('home')">Cancel</button>
+      <button class="btn btn-primary" onclick="quickSaveLead()">💾 Log Visit</button>
+    </div>
+  </div>`;
+}
+
 function renderAddTab() {
   const ed = editingId ? leads.find(l => l.id === editingId) : null;
   const selBrands = ed ? (ed.brands || []) : [];
@@ -1078,7 +1207,7 @@ function renderAddTab() {
   const sectionEnd = `</div></div>`;
 
   return `<div class="form-card">
-    <div class="form-title">${ed ? "✎ Edit Account" : "＋ Add New Account"}</div>
+    <div class="form-title">${ed ? "✎ Edit Account" : (returnTab === "funnel" ? "🎯 Add Direct to Funnel" : "＋ Add New Account")}</div>
 
     ${sectionStart(1, "Account Details", "Who and where")}
       <div class="form-full"><label class="form-label">Account name *</label>
@@ -1149,8 +1278,11 @@ function renderAddTab() {
           <input type="month" id="f-podate" value="${ed?ed.poDate||"":""}" />
         </div>
         <div style="-webkit-flex:1;flex:1;">
-          <label class="form-label">SO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">— Sales Order (month)</span></label>
-          <input type="month" id="f-sodate" value="${ed?ed.soDate||"":""}" />
+          <label class="form-label">Expected SO Quarter <span style="font-size:10px;text-transform:none;color:var(--text3);">— Sales Order</span></label>
+          <select id="f-sodate">
+            <option value="">— select —</option>
+            ${SO_QUARTERS.map(q=>`<option ${ed&&ed.soDate===q?"selected":""}>${q}</option>`).join("")}
+          </select>
         </div>
       </div>
     ${sectionEnd}
@@ -1160,6 +1292,232 @@ function renderAddTab() {
       <button class="btn btn-primary" onclick="saveLead()">💾 Save to Sheet</button>
     </div>
   </div>`;
+}
+
+// ─────────────────────────────────────────
+// ACTIVE FUNNEL TAB — Quotation + Follow-up only
+// ─────────────────────────────────────────
+function renderFunnelTab() {
+  const isManager = currentUser.role === "manager";
+  const sSel = window._funnelS || "All";
+  const search = window._funnelSearch || "";
+  const salesmen = USERS.filter(u => u.role === "salesman");
+
+  let base = getMyLeads().filter(l => ACTIVE_STATUSES.includes(l.status));
+  if (isManager && sSel !== "All") base = base.filter(l => String(l.uid) === sSel);
+  if (search) base = base.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
+  base = [...base].sort((a,b) => (a.opened||"") < (b.opened||"") ? 1 : -1);
+
+  const totalVal = base.reduce((s,l) => s + Number(l.value||0), 0);
+
+  let html = `
+  <div style="display:-webkit-flex;display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-primary" onclick="addDirectToFunnel()">＋ Add Direct to Funnel</button>
+    <input placeholder="Search accounts..." value="${search}" oninput="window._funnelSearch=this.value;renderApp();" style="max-width:200px;"/>
+    ${isManager ? `<select onchange="window._funnelS=this.value;renderApp();" style="width:auto;max-width:180px;">
+      <option value="All" ${sSel==="All"?"selected":""}>All salesmen</option>
+      ${salesmen.map(u=>`<option value="${u.id}" ${sSel===String(u.id)?"selected":""}>${u.name}</option>`).join("")}
+    </select>` : ""}
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${base.length} active account${base.length!==1?"s":""}${totalVal?` · ﷼${totalVal.toLocaleString()} in play`:""}</span>
+  </div>
+
+  <div class="table-card"><div class="table-wrap"><table><thead><tr>
+    <th><span class="col-head">Account</span></th>
+    <th><span class="col-head">Location</span></th>
+    <th><span class="col-head">Status</span></th>
+    <th><span class="col-head">Expected SO Quarter</span></th>
+    <th><span class="col-head">Value (SAR)</span></th>
+    <th><span class="col-head">Next Action</span></th>
+    <th><span class="col-head">Contact</span></th>
+    ${isManager ? `<th><span class="col-head">By</span></th>` : ""}
+    <th><span class="col-head">Actions</span></th>
+  </tr></thead><tbody>`;
+
+  if (base.length === 0) {
+    html += `<tr class="empty-row"><td colspan="${isManager?9:8}">Nothing active right now — log a visit or add direct to the funnel.</td></tr>`;
+  } else {
+    base.forEach(l => {
+      const owner = USERS.find(u => u.id === l.uid);
+      const statusColor = l.status === "Quotation" ? "#f0a500" : "#3498db";
+      const statusSelColor = l.status==="Win"?"var(--green)":l.status==="Lose"?"var(--red)":l.status==="Quotation"?"var(--accent)":"#3498db";
+      html += `<tr>
+        <td class="td-wrap" style="font-weight:500;">${l.name}</td>
+        <td class="td-wrap" style="font-size:11px;">${normalizeCity(l.location)||"-"}</td>
+        <td>
+          <select onchange="quickSetStatus(${l.id}, this.value)" style="width:auto;font-size:11px;padding:4px 22px 4px 8px;font-weight:600;color:${statusSelColor};border-color:${statusSelColor};background-color:var(--bg3);">
+            ${STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select onchange="quickUpdateField(${l.id},'soDate',this.value)" style="width:auto;font-size:11px;padding:4px 20px 4px 6px;font-weight:600;color:${l.soDate?statusColor:"var(--text3)"};background-color:var(--bg3);">
+            <option value="">—</option>
+            ${SO_QUARTERS.map(q=>`<option value="${q}" ${l.soDate===q?"selected":""}>${q}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <input type="number" value="${l.value||""}" placeholder="0" onchange="quickUpdateField(${l.id},'value',this.value)" onkeydown="if(event.key==='Enter')this.blur()" style="width:85px;font-size:12px;padding:4px 6px;"/>
+        </td>
+        <td class="td-wrap">
+          <input type="text" value="${(l.nextAction||"").replace(/"/g,'&quot;')}" placeholder="—" onchange="quickUpdateField(${l.id},'nextAction',this.value)" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%;min-width:130px;font-size:11px;padding:4px 6px;"/>
+        </td>
+        <td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.contact||""}">${l.contact||"-"}</td>
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
+        </td>
+      </tr>`;
+    });
+  }
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+function addDirectToFunnel() {
+  editingId = null;
+  returnTab = "funnel";
+  activeTab = "add";
+  renderApp();
+}
+
+async function quickSetStatus(id, newStatus) {
+  const idx = leads.findIndex(l => l.id === id);
+  if (idx === -1) return;
+  leads[idx].status = newStatus;
+  const l = leads[idx];
+  const data = {
+    name: l.name, phone: l.phone||"", source: l.source||"Visit", location: l.location||"",
+    opened: l.opened||"", value: l.value||"", status: l.status, clientStatus: l.clientStatus||"",
+    brands: (l.brands||[]).join(", "), mainProduct: l.mainProduct||"", nextAction: l.nextAction||"",
+    contact: l.contact||"", notes: l.notes||"", poDate: l.poDate||"", soDate: l.soDate||"",
+    probability: l.probability||"", uid: l.uid, salesman: l.salesman||"", timestamp: l.timestamp||""
+  };
+  await saveToSheet("edit", data);
+  const msg = newStatus === "Win" ? `🎉 ${l.name} marked as Win — moved to Won Targets!`
+    : newStatus === "Lose" ? `${l.name} marked as Lose — removed from the funnel, kept on record`
+    : `${l.name} status set to ${newStatus}`;
+  const type = newStatus === "Win" ? "success" : newStatus === "Lose" ? "error" : "success";
+  showSaveMsg(msg, type);
+  renderApp();
+}
+
+// Inline edit for fields that don't affect which rows are shown (SO Quarter, Value, Next Action)
+// — no full re-render, so focus/typing isn't disturbed.
+async function quickUpdateField(id, field, value) {
+  const idx = leads.findIndex(l => l.id === id);
+  if (idx === -1) return;
+  leads[idx][field] = value;
+  const l = leads[idx];
+  const data = {
+    name: l.name, phone: l.phone||"", source: l.source||"Visit", location: l.location||"",
+    opened: l.opened||"", value: l.value||"", status: l.status, clientStatus: l.clientStatus||"",
+    brands: (l.brands||[]).join(", "), mainProduct: l.mainProduct||"", nextAction: l.nextAction||"",
+    contact: l.contact||"", notes: l.notes||"", poDate: l.poDate||"", soDate: l.soDate||"",
+    probability: l.probability||"", uid: l.uid, salesman: l.salesman||"", timestamp: l.timestamp||""
+  };
+  await saveToSheet("edit", data);
+  showSaveMsg(`✓ ${l.name} updated`, "success");
+}
+
+// ─────────────────────────────────────────
+// WON TARGETS TAB — revenue target tracker
+// ─────────────────────────────────────────
+function renderWonTargetsTab() {
+  const isManager = currentUser.role === "manager";
+  const pSel = window._wonPeriod || "month"; // month | quarter | year
+
+  const now = new Date();
+  const curMonth = monthKeyOfDate(now.toISOString());
+  const curQuarter = quarterOfDate(now.toISOString());
+  const curYear = now.getFullYear();
+
+  let base = getMyLeads().filter(l => l.status === "Win");
+  if (pSel === "month") base = base.filter(l => monthKeyOfDate(l.opened) === curMonth);
+  else if (pSel === "quarter") base = base.filter(l => l.opened && quarterOfDate(l.opened) === curQuarter && new Date(l.opened).getFullYear() === curYear);
+  else if (pSel === "year") base = base.filter(l => l.opened && new Date(l.opened).getFullYear() === curYear);
+
+  const totalRevenue = base.reduce((s,l) => s + Number(l.value||0), 0);
+  const multiplier = pSel === "month" ? 1 : pSel === "quarter" ? 3 : 12;
+  const target = TEAM_TARGET_MONTHLY * multiplier;
+  const targetLabel = pSel === "month" ? "Monthly Team Target" : pSel === "quarter" ? "Quarterly Team Target" : "Annual Team Target";
+  const pct = target > 0 ? Math.min(100, Math.round(totalRevenue / target * 100)) : 0;
+  const avgDeal = base.length ? Math.round(totalRevenue / base.length) : 0;
+  const sorted = [...base].sort((a,b) => Number(b.value||0) - Number(a.value||0));
+
+  // Manager leaderboard
+  let leaderboardHtml = "";
+  if (isManager) {
+    const salesmen = USERS.filter(u => u.role === "salesman");
+    const board = salesmen.map(u => {
+      const wins = base.filter(l => l.uid === u.id);
+      return { u, count: wins.length, value: wins.reduce((s,l)=>s+Number(l.value||0),0) };
+    }).sort((a,b) => b.value - a.value);
+    leaderboardHtml = `
+    <div class="team-card" style="margin-top:20px;">
+      <div class="team-header">🏆 Leaderboard — ${pSel==="month"?"This Month":pSel==="quarter"?"This Quarter":"This Year"}</div>
+      <div class="table-wrap"><table><tbody>
+        ${board.map((row,i) => `<tr>
+          <td style="width:30px;text-align:center;font-size:14px;">${i===0?"🥇":i===1?"🥈":i===2?"🥉":""}</td>
+          <td style="font-weight:500;">${row.u.name}</td>
+          <td style="font-size:11px;color:var(--text3);">${row.count} win${row.count!==1?"s":""}</td>
+          <td style="text-align:right;font-weight:600;color:var(--green);">﷼${row.value.toLocaleString()}</td>
+        </tr>`).join("")}
+      </tbody></table></div>
+    </div>`;
+  }
+
+  return `
+  <div style="display:-webkit-flex;display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">Period:</span>
+    ${[["month","This Month"],["quarter","This Quarter"],["year","This Year"]].map(([v,l])=>`
+      <button onclick="window._wonPeriod='${v}';renderApp()" style="padding:5px 14px;border-radius:5px;font-size:12px;font-weight:500;cursor:pointer;
+        border:1px solid ${pSel===v?"var(--green)":"var(--border)"};
+        background:${pSel===v?"var(--green)":"transparent"};
+        color:${pSel===v?"#000":"var(--text2)"};-webkit-appearance:none;appearance:none;">${l}</button>`).join("")}
+  </div>
+
+  <div style="background:var(--bg2);border:2px solid var(--green);border-radius:14px;padding:28px 26px;margin-bottom:20px;text-align:center;box-shadow:0 0 24px rgba(46,204,113,.12);">
+    <div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-weight:600;">🎯 ${targetLabel}</div>
+    <div style="font-size:34px;font-weight:700;color:var(--text);margin-bottom:4px;">﷼${totalRevenue.toLocaleString()} <span style="font-size:16px;color:var(--text3);font-weight:400;">/ ﷼${target.toLocaleString()}</span></div>
+    <div style="height:18px;background:var(--bg3);border-radius:20px;overflow:hidden;border:1px solid var(--border);margin:16px 0 8px;max-width:520px;margin-left:auto;margin-right:auto;">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#27ae60,var(--green));border-radius:20px;-webkit-transition:width .6s ease;transition:width .6s ease;display:-webkit-flex;display:flex;align-items:center;justify-content:flex-end;">
+        ${pct>15?`<span style="font-size:10px;font-weight:700;color:#000;margin-right:8px;">${pct}%</span>`:""}
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);">${pct>=100?"🎉 Target reached!":`${100-pct}% to go`}</div>
+  </div>
+
+  <div style="display:-webkit-flex;display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--green);">
+      <div class="metric-label">Total Wins</div><div class="metric-value">${base.length}</div></div>
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--accent);">
+      <div class="metric-label">Avg Deal (SAR)</div><div class="metric-value">﷼${avgDeal.toLocaleString()}</div></div>
+    <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--blue);">
+      <div class="metric-label">Total Revenue</div><div class="metric-value">﷼${totalRevenue.toLocaleString()}</div></div>
+  </div>
+
+  <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">🏆 Won Deals</div>
+  <div class="table-card"><div class="table-wrap"><table><thead><tr>
+    <th><span class="col-head">Account</span></th>
+    <th><span class="col-head">Location</span></th>
+    <th><span class="col-head">Value (SAR)</span></th>
+    <th><span class="col-head">Expected SO Qtr</span></th>
+    <th><span class="col-head">Probability</span></th>
+    ${isManager ? `<th><span class="col-head">Salesman</span></th>` : ""}
+  </tr></thead><tbody>
+    ${sorted.length===0 ? `<tr class="empty-row"><td colspan="${isManager?6:5}">No wins yet for this period — keep pushing!</td></tr>` :
+    sorted.map(l => {
+      const owner = USERS.find(u => u.id === l.uid);
+      return `<tr>
+        <td class="td-wrap" style="font-weight:500;">🏆 ${l.name}</td>
+        <td style="font-size:11px;">${normalizeCity(l.location)||"-"}</td>
+        <td style="font-size:13px;font-weight:700;color:var(--green);">﷼${Number(l.value||0).toLocaleString()}</td>
+        <td style="font-size:12px;">${l.soDate||"-"}</td>
+        <td style="font-size:12px;">${l.probability||"-"}</td>
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);">${owner?owner.name:"?"}</td>` : ""}
+      </tr>`;
+    }).join("")}
+  </tbody></table></div></div>
+  ${leaderboardHtml}`;
 }
 
 
@@ -1434,10 +1792,11 @@ function renderTeamTab() {
   }
   function fmtMonth(v) {
     if (!v) return "-";
-    try { const d = new Date(v+"-01"); return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"}); } catch(e) { return v; }
+    if (/^Q[1-4]$/.test(v)) return v;
+    const d = new Date(v+"-01");
+    if (isNaN(d.getTime())) return v;
+    return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"});
   }
-
-  // Read current filter state from DOM if available (persisted via teamFilters global)
   const qSel = window._teamQ || "All";
   const sSel = window._teamS || "All";
 
@@ -1487,7 +1846,7 @@ function renderTeamTab() {
         <th style="min-width:100px;"><span class="col-head">Location</span></th>
         <th style="min-width:90px;"><span class="col-head">Status</span></th>
         <th style="min-width:80px;"><span class="col-head">PO Date</span></th>
-        <th style="min-width:80px;"><span class="col-head">SO Date</span></th>
+        <th style="min-width:80px;"><span class="col-head">Expected SO Qtr</span></th>
         <th style="min-width:90px;"><span class="col-head">Value (SAR)</span></th>
         <th style="min-width:70px;"><span class="col-head">Probability</span></th>
         ${sSel==="All"?`<th style="min-width:110px;"><span class="col-head">Salesman</span></th>`:""}
@@ -1557,8 +1916,8 @@ function setTimePeriod(p) {
 }
 
 function switchTab(t) { activeTab = t; if (t !== "add") editingId = null; renderApp(); }
-function startEdit(id) { editingId = id; activeTab = "add"; renderApp(); }
-function cancelEdit() { editingId = null; activeTab = "leads"; renderApp(); }
+function startEdit(id) { returnTab = activeTab !== "add" ? activeTab : (returnTab || "leads"); editingId = id; activeTab = "add"; renderApp(); }
+function cancelEdit() { editingId = null; activeTab = returnTab || "leads"; renderApp(); }
 function setFilter(key, val) { filters[key] = val; renderApp(); }
 
 function toggleFilter(key, val) {
@@ -1613,18 +1972,18 @@ async function saveLead() {
   const salesman = USERS.find(u => u.id === uid);
   const data = {
     name,
-    phone: document.getElementById("f-phone").value.trim(),
-    source: document.getElementById("f-source").value,
-    location: document.getElementById("f-location").value.trim(),
-    opened: document.getElementById("f-opened").value,
-    value: document.getElementById("f-value").value,
-    status: document.getElementById("f-status").value,
-    clientStatus: document.getElementById("f-cstatus").value,
+    phone: document.getElementById("f-phone")?.value.trim() || "",
+    source: document.getElementById("f-source")?.value || "Visit",
+    location: document.getElementById("f-location")?.value.trim() || "",
+    opened: document.getElementById("f-opened")?.value || new Date().toISOString().split("T")[0],
+    value: document.getElementById("f-value")?.value || "",
+    status: document.getElementById("f-status")?.value || "Quotation",
+    clientStatus: document.getElementById("f-cstatus")?.value || "New",
     brands: checked,
-    mainProduct: document.getElementById("f-mainprod").value.trim(),
-    nextAction: document.getElementById("f-nextaction").value.trim(),
-    contact: document.getElementById("f-contact").value.trim(),
-    notes: document.getElementById("f-notes").value.trim(),
+    mainProduct: document.getElementById("f-mainprod")?.value.trim() || "",
+    nextAction: document.getElementById("f-nextaction")?.value.trim() || "",
+    contact: document.getElementById("f-contact")?.value.trim() || "",
+    notes: document.getElementById("f-notes")?.value.trim() || "",
     poDate: document.getElementById("f-podate")?.value || "",
     soDate: document.getElementById("f-sodate")?.value || "",
     probability: document.getElementById("f-probability")?.value || "",
@@ -1642,7 +2001,40 @@ async function saveLead() {
     leads.push({ id: nextId++, closed: "", timestamp: "", ...data });
     await saveToSheet("add", { ...data, brands: checked.join(", ") });
   }
-  activeTab = "leads";
+  activeTab = returnTab || "leads";
+  renderApp();
+}
+
+// ── Log Visit — minimal-field quick save ──
+async function quickSaveLead() {
+  const name = document.getElementById("f-name").value.trim();
+  if (!name) { alert("Account name is required"); return; }
+  const checked = Array.from(document.querySelectorAll("#brand-pill-grid input:checked")).map(i => i.value);
+  const location = document.getElementById("f-location")?.value.trim() || "";
+  const opened = document.getElementById("f-opened")?.value || new Date().toISOString().split("T")[0];
+  const contact = document.getElementById("f-contact")?.value.trim() || "";
+  const nextAction = document.getElementById("f-nextaction")?.value.trim() || "";
+  const phone = document.getElementById("f-phone")?.value.trim() || "";
+  const source = document.getElementById("f-source")?.value || "Visit";
+  const clientStatus = document.getElementById("f-cstatus")?.value || "New";
+  const mainProduct = document.getElementById("f-mainprod")?.value.trim() || "";
+  const notes = document.getElementById("f-notes")?.value.trim() || "";
+
+  // Log Visit always lands in the Active Funnel as "Quotation" — no status field on this form
+  const status = "Quotation";
+
+  const data = {
+    name, phone, source, location, opened,
+    value:"", status, clientStatus, brands: checked,
+    mainProduct, nextAction, contact, notes,
+    poDate:"", soDate:"", probability:"",
+    uid: currentUser.id, salesman: currentUser.name, imported: false
+  };
+
+  leads.push({ id: nextId++, closed: "", timestamp: "", ...data });
+  await saveToSheet("add", { ...data, brands: checked.join(", ") });
+  showSaveMsg(`✓ Visit logged — ${name} added to the Active Funnel`, "success");
+  activeTab = "funnel";
   renderApp();
 }
 
