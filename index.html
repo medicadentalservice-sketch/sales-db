@@ -907,15 +907,6 @@ function renderHomeTab() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  // ── Goal Gradient: never start at 0% — baseline is a completed "check-in" ──
-  const todayStr = new Date().toISOString().split("T")[0];
-  const loggedToday = getMyLeads().filter(l => l.opened === todayStr).length;
-  let momentumPct = 20;
-  let momentumMsg = "20% — Daily Check-in Complete";
-  if (loggedToday >= 1) { momentumPct = 55; momentumMsg = `${loggedToday} visit${loggedToday>1?"s":""} logged today — keep going!`; }
-  if (loggedToday >= 2) { momentumPct = 75; momentumMsg = `Great pace — ${loggedToday} visits logged today`; }
-  if (loggedToday >= 3) { momentumPct = 100; momentumMsg = `Daily goal reached — ${loggedToday} visits logged 🎉`; }
-
   const cards = [
     {
       id: "logvisit",
@@ -963,20 +954,9 @@ function renderHomeTab() {
 
   return `
   <div style="display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;min-height:60vh;padding:20px;">
-    <div style="margin-bottom:28px;text-align:center;">
+    <div style="margin-bottom:40px;text-align:center;">
       <div style="font-size:26px;font-weight:600;color:var(--text);margin-bottom:6px;">${greeting}, ${firstName}</div>
       <div style="font-size:13px;color:var(--text3);">What would you like to do today?</div>
-    </div>
-
-    <div style="width:100%;max-width:420px;margin-bottom:36px;">
-      <div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;align-items:baseline;margin-bottom:7px;">
-        <span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Daily Momentum</span>
-        <span style="font-size:12px;color:var(--accent);font-weight:600;">${momentumPct}%</span>
-      </div>
-      <div style="height:8px;background:var(--bg3);border-radius:20px;overflow:hidden;border:1px solid var(--border);">
-        <div style="height:100%;width:${momentumPct}%;background:linear-gradient(90deg,var(--accent2),var(--accent));border-radius:20px;-webkit-transition:width .5s ease;transition:width .5s ease;"></div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center;">${momentumMsg}</div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,220px));gap:16px;max-width:700px;width:100%;-webkit-justify-content:center;justify-content:center;">
