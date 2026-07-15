@@ -249,35 +249,46 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 
 /* ── FORM ── */
 .form-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;}
+.form-section{
+  background:var(--bg3);border:1px solid var(--border);border-radius:10px;
+  padding:18px 18px 16px;margin-bottom:18px;
+}
+.form-section:last-of-type{margin-bottom:0;}
 .form-title{font-size:15px;font-weight:600;margin-bottom:18px;}
 .form-grid{display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:12px;}
 .form-col{-webkit-flex:1 1 200px;flex:1 1 200px;}
 .form-full{width:100%;}
 .form-label{font-size:11px;color:var(--text2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px;font-weight:500;}
 .city-hint{font-size:11px;color:var(--blue);margin-top:4px;min-height:14px;}
+.status-hint{font-size:11px;color:var(--accent);margin-top:4px;min-height:14px;}
 .brand-grid{
-  display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:8px;
-  padding:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+  display:-webkit-flex;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;gap:10px;
+  padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
 }
-.brand-check{
-  display:-webkit-flex;display:flex;
+.brand-pill-btn{
+  display:-webkit-inline-flex;display:inline-flex;
   -webkit-align-items:center;align-items:center;
-  gap:7px;font-size:13px;color:var(--text);cursor:pointer;
-  -webkit-flex:0 0 calc(50% - 4px);flex:0 0 calc(50% - 4px);
+  gap:8px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;
+  padding:10px 16px;border-radius:24px;border:1.5px solid var(--border2);
+  background:var(--bg4);-webkit-user-select:none;user-select:none;
+  -webkit-transition:all .15s cubic-bezier(.4,0,.2,1);transition:all .15s cubic-bezier(.4,0,.2,1);
 }
-.brand-check input[type=checkbox]{
-  width:15px;height:15px;-webkit-flex-shrink:0;flex-shrink:0;
-  border:1px solid var(--border2);border-radius:3px;
-  background:var(--bg4);-webkit-appearance:none;appearance:none;
-  position:relative;cursor:pointer;
+.brand-pill-btn:hover{border-color:var(--accent);color:var(--text);-webkit-transform:translateY(-1px);transform:translateY(-1px);}
+.brand-pill-btn.selected{
+  background:var(--accent);border-color:var(--accent);color:#000;font-weight:700;
+  -webkit-transform:scale(1.06);transform:scale(1.06);
+  box-shadow:0 3px 12px rgba(240,165,0,.4);
 }
-.brand-check input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent);}
-.brand-check input[type=checkbox]:checked::after{
-  content:'';position:absolute;left:4px;top:1px;
-  width:5px;height:9px;border:2px solid #000;
-  border-top:none;border-left:none;
-  -webkit-transform:rotate(45deg);transform:rotate(45deg);
+.brand-pill-btn.selected:hover{-webkit-transform:scale(1.06) translateY(-1px);transform:scale(1.06) translateY(-1px);}
+.brand-pill-btn .pill-check{
+  width:16px;height:16px;border-radius:50%;border:2px solid currentColor;
+  display:-webkit-inline-flex;display:inline-flex;-webkit-align-items:center;align-items:center;
+  -webkit-justify-content:center;justify-content:center;-webkit-flex-shrink:0;flex-shrink:0;
+  -webkit-transition:all .15s;transition:all .15s;
 }
+.brand-pill-btn.selected .pill-check{background:#000;border-color:#000;}
+.brand-pill-btn.selected .pill-check::after{content:'✓';font-size:10px;color:var(--accent);font-weight:700;}
+.brand-pill-btn input[type=checkbox]{display:none;}
 .form-actions{
   display:-webkit-flex;display:flex;
   -webkit-justify-content:flex-end;justify-content:flex-end;
@@ -561,6 +572,25 @@ function inferStatus(next) {
   if (t.includes("won") || t.includes("win") || t.includes("po")) return "Win";
   if (t.includes("lost") || t.includes("lose")) return "Lose";
   return "Quotation";
+}
+
+// ── Smart Defaults: live-infer pipeline status while typing Next Action ──
+function inferStatusFromAction(val) {
+  const sel = document.getElementById("f-status");
+  const hint = document.getElementById("status-hint");
+  if (!sel || !val || !val.trim()) { if(hint) hint.textContent=""; return; }
+  const t = val.toLowerCase();
+  let inferred = null;
+  if (t.includes("عرض سعر") || t.includes("quotation") || t.includes("quote") || t.includes("send quot")) inferred = "Quotation";
+  else if (t.includes("متابعة") || t.includes("follow up") || t.includes("follow-up") || t.includes("call back")) inferred = "Follow-up";
+  else if (t.includes("po") || t.includes("won") || t.includes("win") || t.includes("purchase order") || t.includes("delivery")) inferred = "Win";
+  else if (t.includes("lost") || t.includes("lose") || t.includes("cancel")) inferred = "Lose";
+  if (inferred) {
+    sel.value = inferred;
+    if (hint) hint.innerHTML = `→ Pipeline status set to <b style="color:var(--accent);">${inferred}</b>`;
+  } else if (hint) {
+    hint.textContent = "";
+  }
 }
 function parseSheetDate(str) {
   if (!str) return new Date().toISOString().split("T")[0];
@@ -1034,19 +1064,29 @@ function renderAddTab() {
 
   function fmtMonth(v) { return v||""; }
 
+  function sectionStart(num, title, desc) {
+    return `<div class="form-section">
+    <div style="display:-webkit-flex;display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div style="width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-size:11px;font-weight:700;display:-webkit-flex;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${num}</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">${title}</div>
+        <div style="font-size:10px;color:var(--text3);">${desc}</div>
+      </div>
+    </div>
+    <div class="form-grid">`;
+  }
+  const sectionEnd = `</div></div>`;
+
   return `<div class="form-card">
     <div class="form-title">${ed ? "✎ Edit Account" : "＋ Add New Account"}</div>
-    <div class="form-grid">
 
+    ${sectionStart(1, "Account Details", "Who and where")}
       <div class="form-full"><label class="form-label">Account name *</label>
         <input id="f-name" value="${ed?ed.name:""}" placeholder="e.g. Dr. Ahmed Clinic" list="account-suggestions" autocomplete="off"/>
         <datalist id="account-suggestions">
           ${[...leads].reverse().reduce((acc,l)=>{if(l.name&&!acc.includes(l.name))acc.push(l.name);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
         </datalist>
       </div>
-
-      <div class="form-col"><label class="form-label">Phone</label><input id="f-phone" value="${ed?ed.phone||"":""}" placeholder="05XXXXXXXX"/></div>
-      <div class="form-col"><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
 
       <div class="form-full">
         <label class="form-label">Location <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— Arabic or English</span></label>
@@ -1057,27 +1097,25 @@ function renderAddTab() {
         <div class="city-hint" id="city-hint"></div>
       </div>
 
-      <div class="form-col"><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${ed?ed.opened:new Date().toISOString().split("T")[0]}"/></div>
+      <div class="form-col"><label class="form-label">Phone</label><input id="f-phone" value="${ed?ed.phone||"":""}" placeholder="05XXXXXXXX"/></div>
       <div class="form-col"><label class="form-label">Client status</label><select id="f-cstatus"><option ${!ed||ed.clientStatus==="New"?"selected":""}>New</option><option ${ed&&ed.clientStatus==="Old"?"selected":""}>Old</option></select></div>
+      <div class="form-col"><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option ${ed&&ed.source===s?"selected":""}>${s}</option>`).join("")}</select></div>
+    ${sectionEnd}
 
-      <div class="form-col"><label class="form-label">Pipeline status</label>
-        <select id="f-status">${STATUSES.map(s=>`<option ${ed&&ed.status===s?"selected":""}>${s}</option>`).join("")}</select>
-      </div>
-      <div class="form-col"><label class="form-label">Probability</label>
-        <select id="f-probability"><option value="">— select —</option>${probOptions.map(p=>`<option ${ed&&ed.probability===p?"selected":""}>${p}</option>`).join("")}</select>
-      </div>
-
-      <div class="form-col"><label class="form-label">Deal value (SAR)</label><input type="number" id="f-value" value="${ed?ed.value||"":""}" placeholder="0"/></div>
-      <div class="form-col"><label class="form-label">PO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">(month)</span></label>
-        <input type="month" id="f-podate" value="${ed?ed.poDate||"":""}" />
-      </div>
-      <div class="form-col"><label class="form-label">SO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">(month)</span></label>
-        <input type="month" id="f-sodate" value="${ed?ed.soDate||"":""}" />
-      </div>
+    ${sectionStart(2, "Visit Details", "What happened during the visit")}
+      <div class="form-col"><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${ed?ed.opened:new Date().toISOString().split("T")[0]}"/></div>
+      <div class="form-col"><label class="form-label">Contact information</label><input id="f-contact" value="${ed?ed.contact||"":""}" placeholder="e.g. Dr. Ali — Purchasing manager"/></div>
 
       <div class="form-full">
-        <label class="form-label" style="margin-bottom:8px;">Brands discussed</label>
-        <div class="brand-grid">${BRANDS.map(b=>`<label class="brand-check"><input type="checkbox" value="${b}" ${selBrands.includes(b)?"checked":""}/>${b}</label>`).join("")}</div>
+        <label class="form-label" style="margin-bottom:8px;">Brands discussed <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— tap to build the deal profile</span></label>
+        <div class="brand-grid" id="brand-pill-grid">
+          ${BRANDS.map(b=>`
+            <div class="brand-pill-btn ${selBrands.includes(b)?"selected":""}" data-brand="${b}" onclick="toggleBrandPill(this,'${b}')">
+              <span class="pill-check"></span>
+              <input type="checkbox" value="${b}" ${selBrands.includes(b)?"checked":""}/>
+              <span>${b}</span>
+            </div>`).join("")}
+        </div>
       </div>
 
       <div class="form-full"><label class="form-label">Main product of visit</label>
@@ -1086,21 +1124,44 @@ function renderAddTab() {
           ${[...leads].reverse().reduce((acc,l)=>{if(l.mainProduct&&!acc.includes(l.mainProduct))acc.push(l.mainProduct);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
         </datalist>
       </div>
-      <div class="form-full"><label class="form-label">Next action</label>
-        <input id="f-nextaction" value="${ed?ed.nextAction||"":""}" placeholder="e.g. Send quotation, Follow up Thursday" list="nextaction-suggestions" autocomplete="off"/>
+      <div class="form-full"><label class="form-label">Next action <span style="font-size:10px;text-transform:none;letter-spacing:0;color:var(--text3);">— pipeline status auto-fills as you type</span></label>
+        <input id="f-nextaction" value="${ed?ed.nextAction||"":""}" placeholder="e.g. Send quotation, Follow up Thursday" list="nextaction-suggestions" autocomplete="off" oninput="inferStatusFromAction(this.value)"/>
         <datalist id="nextaction-suggestions">
           ${[...leads].reverse().reduce((acc,l)=>{if(l.nextAction&&!acc.includes(l.nextAction))acc.push(l.nextAction);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
         </datalist>
+        <div class="status-hint" id="status-hint"></div>
       </div>
-      <div class="form-full"><label class="form-label">Contact information</label><input id="f-contact" value="${ed?ed.contact||"":""}" placeholder="e.g. Dr. Ali — Purchasing manager"/></div>
       <div class="form-full"><label class="form-label">Notes</label><input id="f-notes" value="${ed?ed.notes||"":""}" placeholder="Any additional notes..."/></div>
-    </div>
+    ${sectionEnd}
+
+    ${sectionStart(3, "Pipeline & Deal", "Sales tracking")}
+      <div class="form-col"><label class="form-label">Pipeline status</label>
+        <select id="f-status">${STATUSES.map(s=>`<option ${ed&&ed.status===s?"selected":""}>${s}</option>`).join("")}</select>
+      </div>
+      <div class="form-col"><label class="form-label">Probability</label>
+        <select id="f-probability"><option value="">— select —</option>${probOptions.map(p=>`<option ${ed&&ed.probability===p?"selected":""}>${p}</option>`).join("")}</select>
+      </div>
+      <div class="form-col"><label class="form-label">Deal value (SAR)</label><input type="number" id="f-value" value="${ed?ed.value||"":""}" placeholder="0"/></div>
+
+      <div class="form-full" style="display:-webkit-flex;display:flex;gap:12px;">
+        <div style="-webkit-flex:1;flex:1;">
+          <label class="form-label">PO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">— Purchase Order (month)</span></label>
+          <input type="month" id="f-podate" value="${ed?ed.poDate||"":""}" />
+        </div>
+        <div style="-webkit-flex:1;flex:1;">
+          <label class="form-label">SO Date <span style="font-size:10px;text-transform:none;color:var(--text3);">— Sales Order (month)</span></label>
+          <input type="month" id="f-sodate" value="${ed?ed.soDate||"":""}" />
+        </div>
+      </div>
+    ${sectionEnd}
+
     <div class="form-actions">
       <button class="btn" onclick="cancelEdit()">Cancel</button>
       <button class="btn btn-primary" onclick="saveLead()">💾 Save to Sheet</button>
     </div>
   </div>`;
 }
+
 
 // ─────────────────────────────────────────
 // CHARTS TAB — cross-filtering
@@ -1529,6 +1590,12 @@ document.addEventListener('click', function(e) {
 });
 function clearFilters() { filters = { name:"", location:[], clientStatus:[], brands:[], mainProduct:[], nextAction:"", status:[], salesman:[] }; closeAllDropdowns(); renderApp(); }
 
+function toggleBrandPill(el, brand) {
+  const cb = el.querySelector("input[type=checkbox]");
+  cb.checked = !cb.checked;
+  el.classList.toggle("selected", cb.checked);
+}
+
 function previewCity(val) {
   const el = document.getElementById("city-hint");
   if (!el) return;
@@ -1541,7 +1608,7 @@ function previewCity(val) {
 async function saveLead() {
   const name = document.getElementById("f-name").value.trim();
   if (!name) { alert("Account name is required"); return; }
-  const checked = Array.from(document.querySelectorAll(".brand-check input:checked")).map(i => i.value);
+  const checked = Array.from(document.querySelectorAll("#brand-pill-grid input:checked")).map(i => i.value);
   const uid = editingId ? leads.find(l => l.id === editingId).uid : currentUser.id;
   const salesman = USERS.find(u => u.id === uid);
   const data = {
