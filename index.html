@@ -221,6 +221,8 @@ tbody td{padding:8px 10px;color:var(--text);vertical-align:top;}
 .b-follow{background:rgba(52,152,219,.1);color:var(--blue);border:1px solid rgba(52,152,219,.2);}
 .b-new{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.2);}
 .b-old{background:rgba(90,96,112,.1);color:var(--text2);border:1px solid var(--border);}
+.b-draft{background:rgba(90,96,112,.15);color:var(--text2);border:1px solid var(--border2);}
+.b-negotiation{background:rgba(155,89,182,.1);color:var(--purple);border:1px solid rgba(155,89,182,.2);}
 .b-sheet{background:rgba(46,204,113,.08);color:#27ae60;border:1px solid rgba(46,204,113,.15);font-size:10px;padding:1px 5px;}
 .b-new-entry{background:rgba(52,152,219,.08);color:var(--blue);border:1px solid rgba(52,152,219,.15);font-size:10px;padding:1px 5px;}
 
@@ -468,8 +470,11 @@ const REFERENCE_DOCS = [
 
 const BRANDS = ["CJ Optic","Bisco","Planmeca","Mectron","Euronda","Swident","Loran","MGF"];
 const SOURCES = ["Visit","Media","Website","Other"];
-const STATUSES = ["Quotation","Follow-up","Win","Lose"];
-const ACTIVE_STATUSES = ["Quotation","Follow-up"]; // The Funnel
+const STATUSES = ["Draft","Negotiation","Quotation","Win","Lose"];
+const DRAFT_STATUSES = ["Draft","Negotiation"];   // shown in Log Visit table
+const FUNNEL_STATUSES = ["Quotation"];             // shown in Active Funnel table
+const FUNNEL_DROPDOWN_STATUSES = ["Quotation","Win","Lose"]; // Funnel's inline status choices
+const VISIT_DROPDOWN_STATUSES = ["Draft","Negotiation","Quotation"]; // Log Visit's inline status choices
 const TEAM_TARGET_MONTHLY = 500000; // SAR — monthly team target
 const SO_QUARTERS = ["Q1","Q2","Q3","Q4"];
 
@@ -583,10 +588,11 @@ function uidFromName(name) {
 }
 function inferStatus(next) {
   const t = (next || "").toLowerCase();
-  if (t.includes("follow up") || t.includes("follow-up") || t.includes("متابعة")) return "Follow-up";
   if (t.includes("won") || t.includes("win") || t.includes("po")) return "Win";
   if (t.includes("lost") || t.includes("lose")) return "Lose";
-  return "Quotation";
+  if (t.includes("quotation") || t.includes("عرض سعر") || t.includes("quote")) return "Quotation";
+  if (t.includes("follow up") || t.includes("follow-up") || t.includes("متابعة") || t.includes("negotiat")) return "Negotiation";
+  return "Draft";
 }
 
 // ── Smart Defaults: live-infer pipeline status while typing Next Action ──
@@ -597,7 +603,7 @@ function inferStatusFromAction(val) {
   const t = val.toLowerCase();
   let inferred = null;
   if (t.includes("عرض سعر") || t.includes("quotation") || t.includes("quote") || t.includes("send quot")) inferred = "Quotation";
-  else if (t.includes("متابعة") || t.includes("follow up") || t.includes("follow-up") || t.includes("call back")) inferred = "Follow-up";
+  else if (t.includes("متابعة") || t.includes("follow up") || t.includes("follow-up") || t.includes("call back") || t.includes("negotiat")) inferred = "Negotiation";
   else if (t.includes("po") || t.includes("won") || t.includes("win") || t.includes("purchase order") || t.includes("delivery")) inferred = "Win";
   else if (t.includes("lost") || t.includes("lose") || t.includes("cancel")) inferred = "Lose";
   if (inferred) {
@@ -662,12 +668,12 @@ function metrics(data) {
   const total = data.length;
   const won = data.filter(l => l.status === "Win").length;
   const rev = data.filter(l => l.status === "Win").reduce((s,l) => s + Number(l.value||0), 0);
-  const open = data.filter(l => l.status === "Quotation" || l.status === "Follow-up").length;
+  const open = data.filter(l => l.status !== "Win" && l.status !== "Lose").length;
   const rate = total ? Math.round(won/total*100) : 0;
   const avg = won ? Math.round(rev/won) : 0;
   return { total, won, rev, open, rate, avg };
 }
-function badgeClass(s) { return s==="Win"?"b-won":s==="Lose"?"b-lost":s==="Quotation"?"b-open":"b-follow"; }
+function badgeClass(s) { return s==="Win"?"b-won":s==="Lose"?"b-lost":s==="Quotation"?"b-open":s==="Negotiation"?"b-negotiation":"b-draft"; }
 function getCityCounts(data) {
   const map = {};
   data.forEach(l => { const c = normalizeCity(l.location); map[c] = (map[c]||0)+1; });
@@ -713,8 +719,8 @@ async function loadFromSheet() {
       location: (r.location || r.Location || "").trim(),
       opened: parseSheetDate(r.timestamp || r.Timestamp || ""),
       closed: "",
-      value: 0,
-      status: inferStatus(r.nextAction || r["Next Action?"] || ""),
+      value: r.value || 0,
+      status: r.status || inferStatus(r.nextAction || r["Next Action?"] || ""),
       brands: parseBrands(r.brands || r.Brands || ""),
       clientStatus: (r.clientStatus || r["Client Status"] || "Old").trim(),
       mainProduct: (r.mainProduct || r["The main product of the visit"] || "").trim(),
@@ -873,6 +879,7 @@ function renderTabBar() {
     { id:"logvisit", label:"📝 Log Visit" },
     { id:"funnel",   label:"📊 Active Funnel" },
     { id:"won",      label:"🎯 Won Targets" },
+    { id:"calendar", label:"📅 Calendar" },
     { id:"leads",    label:"📋 All Accounts" },
     { id:"charts",   label:"📈 Charts" },
   ];
@@ -887,8 +894,10 @@ function renderTabContent() {
   const el = document.getElementById("tab-content");
   if (activeTab === "home") el.innerHTML = renderHomeTab();
   else if (activeTab === "logvisit") el.innerHTML = renderLogVisitTab();
+  else if (activeTab === "addvisit") el.innerHTML = renderAddVisitFormTab();
   else if (activeTab === "funnel") el.innerHTML = renderFunnelTab();
   else if (activeTab === "won") el.innerHTML = renderWonTargetsTab();
+  else if (activeTab === "calendar") el.innerHTML = renderCalendarTab();
   else if (activeTab === "leads") el.innerHTML = renderLeadsTab();
   else if (activeTab === "add") el.innerHTML = renderAddTab();
   else if (activeTab === "charts") { el.innerHTML = renderChartsTab(); renderCharts(); }
@@ -912,7 +921,7 @@ function renderHomeTab() {
       id: "logvisit",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
       title: "Log a Visit",
-      desc: "Quick daily entry — the essentials only",
+      desc: "Draft & Negotiation — visits not yet quoted",
       color: "#2ecc71"
     },
     {
@@ -928,6 +937,13 @@ function renderHomeTab() {
       title: "Won Targets",
       desc: "Revenue target tracker & wins wall",
       color: "#2ecc71"
+    },
+    {
+      id: "calendar",
+      icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+      title: "Calendar",
+      desc: "Visits by date & pending reminders",
+      color: "#3498db"
     },
     {
       id: "leads",
@@ -1099,10 +1115,88 @@ function renderLeadsTab() {
 // LOG VISIT TAB — minimal daily-log entry
 // ─────────────────────────────────────────
 function renderLogVisitTab() {
-  editingId = null; // Log Visit is always a fresh entry, never an edit
+  const isManager = currentUser.role === "manager";
+  const sSel = window._visitS || "All";
+  const search = window._visitSearch || "";
+  const salesmen = USERS.filter(u => u.role === "salesman");
+
+  let base = getMyLeads().filter(l => DRAFT_STATUSES.includes(l.status));
+  if (isManager && sSel !== "All") base = base.filter(l => String(l.uid) === sSel);
+  if (search) base = base.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
+  base = [...base].sort((a,b) => (a.opened||"") < (b.opened||"") ? 1 : -1);
+
+  let html = `
+  <div style="display:-webkit-flex;display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">
+    <button class="btn btn-primary" onclick="addVisitForm()">＋ Add Visit</button>
+    <input placeholder="Search accounts..." value="${search}" oninput="window._visitSearch=this.value;renderApp();" style="max-width:200px;"/>
+    ${isManager ? `<select onchange="window._visitS=this.value;renderApp();" style="width:auto;max-width:180px;">
+      <option value="All" ${sSel==="All"?"selected":""}>All salesmen</option>
+      ${salesmen.map(u=>`<option value="${u.id}" ${sSel===String(u.id)?"selected":""}>${u.name}</option>`).join("")}
+    </select>` : ""}
+    <span style="margin-left:auto;font-size:11px;color:var(--text3);">${base.length} account${base.length!==1?"s":""} not yet quoted</span>
+  </div>
+
+  <div class="table-card"><div class="table-wrap"><table><thead><tr>
+    <th><span class="col-head">Account</span></th>
+    <th><span class="col-head">Location</span></th>
+    <th><span class="col-head">Status</span></th>
+    <th><span class="col-head">Expected SO Quarter</span></th>
+    <th><span class="col-head">Value (SAR)</span></th>
+    <th><span class="col-head">Next Action</span></th>
+    <th><span class="col-head">Contact</span></th>
+    ${isManager ? `<th><span class="col-head">By</span></th>` : ""}
+    <th><span class="col-head">Actions</span></th>
+  </tr></thead><tbody>`;
+
+  if (base.length === 0) {
+    html += `<tr class="empty-row"><td colspan="${isManager?9:8}">Nothing here — add a visit to start tracking it.</td></tr>`;
+  } else {
+    base.forEach(l => {
+      const owner = USERS.find(u => u.id === l.uid);
+      const statusSelColor = l.status==="Negotiation"?"var(--purple)":l.status==="Quotation"?"var(--accent)":"var(--text2)";
+      html += `<tr>
+        <td class="td-wrap" style="font-weight:500;">${l.name}</td>
+        <td class="td-wrap" style="font-size:11px;">${normalizeCity(l.location)||"-"}</td>
+        <td>
+          <select onchange="quickSetStatus(${l.id}, this.value)" style="width:auto;font-size:11px;padding:4px 22px 4px 8px;font-weight:600;color:${statusSelColor};border-color:${statusSelColor};background-color:var(--bg3);">
+            ${VISIT_DROPDOWN_STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select onchange="quickUpdateField(${l.id},'soDate',this.value)" style="width:auto;font-size:11px;padding:4px 20px 4px 6px;font-weight:600;color:${l.soDate?"var(--accent)":"var(--text3)"};background-color:var(--bg3);">
+            <option value="">—</option>
+            ${SO_QUARTERS.map(q=>`<option value="${q}" ${l.soDate===q?"selected":""}>${q}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <input type="number" value="${l.value||""}" placeholder="0" onchange="quickUpdateField(${l.id},'value',this.value)" onkeydown="if(event.key==='Enter')this.blur()" style="width:85px;font-size:12px;padding:4px 6px;"/>
+        </td>
+        <td class="td-wrap">
+          <input type="text" value="${(l.nextAction||"").replace(/"/g,'&quot;')}" placeholder="—" onchange="quickUpdateField(${l.id},'nextAction',this.value)" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%;min-width:130px;font-size:11px;padding:4px 6px;"/>
+        </td>
+        <td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.contact||""}">${l.contact||"-"}</td>
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
+        <td style="white-space:nowrap;">
+          <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
+        </td>
+      </tr>`;
+    });
+  }
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+function addVisitForm() {
+  editingId = null;
+  returnTab = "logvisit";
+  activeTab = "addvisit";
+  renderApp();
+}
+
+function renderAddVisitFormTab() {
   return `<div class="form-card">
-    <div class="form-title">📝 Log a Visit</div>
-    <div style="font-size:12px;color:var(--text3);margin:-10px 0 18px;">Daily logging — no deal value, probability, or pipeline status here. Saves straight into the Active Funnel as <b style="color:var(--accent);">Quotation</b>.</div>
+    <div class="form-title">📝 Add Visit</div>
+    <div style="font-size:12px;color:var(--text3);margin:-10px 0 18px;">Pick a status below — <b style="color:var(--accent);">Quotation</b> sends it straight into the Active Funnel.</div>
 
     <div class="form-section">
       <div class="form-grid">
@@ -1112,6 +1206,11 @@ function renderLogVisitTab() {
             ${[...leads].reverse().reduce((acc,l)=>{if(l.name&&!acc.includes(l.name))acc.push(l.name);return acc;},[]).map(n=>`<option value="${n.replace(/"/g,'&quot;')}"/>`).join("")}
           </datalist>
         </div>
+
+        <div class="form-col"><label class="form-label">Status</label>
+          <select id="f-status">${VISIT_DROPDOWN_STATUSES.map(s=>`<option ${s==="Draft"?"selected":""}>${s}</option>`).join("")}</select>
+        </div>
+        <div class="form-col"><label class="form-label">Client status</label><select id="f-cstatus"><option selected>New</option><option>Old</option></select></div>
 
         <div class="form-col"><label class="form-label">Phone</label><input id="f-phone" value="" placeholder="05XXXXXXXX"/></div>
         <div class="form-col"><label class="form-label">Source</label><select id="f-source">${SOURCES.map(s=>`<option>${s}</option>`).join("")}</select></div>
@@ -1126,7 +1225,6 @@ function renderLogVisitTab() {
         </div>
 
         <div class="form-col"><label class="form-label">Date of visit</label><input type="date" id="f-opened" value="${new Date().toISOString().split("T")[0]}"/></div>
-        <div class="form-col"><label class="form-label">Client status</label><select id="f-cstatus"><option selected>New</option><option>Old</option></select></div>
 
         <div class="form-full">
           <label class="form-label" style="margin-bottom:8px;">Brands discussed</label>
@@ -1160,8 +1258,8 @@ function renderLogVisitTab() {
     </div>
 
     <div class="form-actions">
-      <button class="btn" onclick="switchTab('home')">Cancel</button>
-      <button class="btn btn-primary" onclick="quickSaveLead()">💾 Log Visit</button>
+      <button class="btn" onclick="switchTab('${returnTab||"logvisit"}')">Cancel</button>
+      <button class="btn btn-primary" onclick="quickSaveLead()">💾 Save Visit</button>
     </div>
   </div>`;
 }
@@ -1283,7 +1381,7 @@ function renderFunnelTab() {
   const search = window._funnelSearch || "";
   const salesmen = USERS.filter(u => u.role === "salesman");
 
-  let base = getMyLeads().filter(l => ACTIVE_STATUSES.includes(l.status));
+  let base = getMyLeads().filter(l => FUNNEL_STATUSES.includes(l.status));
   if (isManager && sSel !== "All") base = base.filter(l => String(l.uid) === sSel);
   if (search) base = base.filter(l => l.name.toLowerCase().includes(search.toLowerCase()));
   base = [...base].sort((a,b) => (a.opened||"") < (b.opened||"") ? 1 : -1);
@@ -1325,7 +1423,7 @@ function renderFunnelTab() {
         <td class="td-wrap" style="font-size:11px;">${normalizeCity(l.location)||"-"}</td>
         <td>
           <select onchange="quickSetStatus(${l.id}, this.value)" style="width:auto;font-size:11px;padding:4px 22px 4px 8px;font-weight:600;color:${statusSelColor};border-color:${statusSelColor};background-color:var(--bg3);">
-            ${STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s}</option>`).join("")}
+            ${FUNNEL_DROPDOWN_STATUSES.map(s=>`<option value="${s}" ${l.status===s?"selected":""}>${s}</option>`).join("")}
           </select>
         </td>
         <td>
@@ -1500,6 +1598,139 @@ function renderWonTargetsTab() {
   ${leaderboardHtml}`;
 }
 
+// ─────────────────────────────────────────
+// CALENDAR TAB — visits by date + pending reminders
+// ─────────────────────────────────────────
+function renderCalendarTab() {
+  const isManager = currentUser.role === "manager";
+  const now = new Date();
+  const calYear = window._calYear ?? now.getFullYear();
+  const calMonth = window._calMonth ?? now.getMonth(); // 0-11
+  const todayStr = now.toISOString().split("T")[0];
+  const selectedDay = window._calSelectedDay || null;
+
+  const myLeads = getMyLeads();
+
+  // Build a map of date -> leads visited that day
+  const byDate = {};
+  myLeads.forEach(l => {
+    if (!l.opened) return;
+    (byDate[l.opened] ||= []).push(l);
+  });
+
+  const statusDot = s => s==="Win"?"var(--green)":s==="Lose"?"var(--red)":s==="Quotation"?"var(--accent)":s==="Negotiation"?"var(--purple)":"var(--text3)";
+
+  // ── Month grid ──
+  const firstOfMonth = new Date(calYear, calMonth, 1);
+  const startDow = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const monthLabel = firstOfMonth.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+  let cells = "";
+  for (let i = 0; i < startDow; i++) cells += `<div style="min-height:64px;"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const dayLeads = byDate[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === selectedDay;
+    const dots = dayLeads.slice(0,4).map(l => `<span style="width:6px;height:6px;border-radius:50%;background:${statusDot(l.status)};display:inline-block;"></span>`).join("");
+    cells += `<div onclick="window._calSelectedDay='${dateStr}';renderApp();" style="
+        min-height:64px;padding:6px;border-radius:8px;cursor:pointer;
+        background:${isSelected?"var(--bg4)":"var(--bg2)"};
+        border:1px solid ${isToday?"var(--accent)":isSelected?"var(--border2)":"var(--border)"};
+        -webkit-transition:background .15s;transition:background .15s;">
+      <div style="font-size:11px;font-weight:${isToday?"700":"500"};color:${isToday?"var(--accent)":"var(--text2)"};margin-bottom:4px;">${day}</div>
+      <div style="display:-webkit-flex;display:flex;gap:3px;flex-wrap:wrap;">${dots}</div>
+      ${dayLeads.length>4?`<div style="font-size:9px;color:var(--text3);margin-top:2px;">+${dayLeads.length-4}</div>`:""}
+    </div>`;
+  }
+
+  const dowLabels = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  // ── Selected day detail ──
+  let dayDetailHtml = "";
+  if (selectedDay) {
+    const dayLeads = byDate[selectedDay] || [];
+    const niceDate = new Date(selectedDay).toLocaleDateString("en-GB", { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+    dayDetailHtml = `
+    <div class="team-card" style="margin-top:20px;">
+      <div class="team-header">📍 Visits on ${niceDate} (${dayLeads.length})</div>
+      <div class="table-wrap"><table><tbody>
+        ${dayLeads.length===0 ? `<tr class="empty-row"><td colspan="${isManager?6:5}">No visits logged this day.</td></tr>` :
+        dayLeads.map(l => {
+          const owner = USERS.find(u => u.id === l.uid);
+          return `<tr>
+            <td style="font-weight:500;">${l.name}</td>
+            <td style="font-size:11px;color:var(--text3);">${normalizeCity(l.location)||"-"}</td>
+            <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
+            <td style="font-size:11px;color:var(--text2);">${l.nextAction||"-"}</td>
+            ${isManager ? `<td style="font-size:11px;color:var(--text3);">${owner?owner.name:"?"}</td>` : ""}
+            <td><button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button></td>
+          </tr>`;
+        }).join("")}
+      </tbody></table></div>
+    </div>`;
+  }
+
+  // ── Reminders: pending Next Actions from active leads ──
+  // No due-date field exists on a visit, so this lists every active account
+  // that still has a Next Action — not pinned to a specific future day.
+  const pending = myLeads
+    .filter(l => l.status !== "Win" && l.status !== "Lose" && l.nextAction && l.nextAction.trim())
+    .sort((a,b) => (a.opened||"") < (b.opened||"") ? -1 : 1);
+
+  const remindersHtml = `
+  <div class="team-card" style="margin-top:20px;">
+    <div class="team-header">🔔 Next Action Reminders (${pending.length}) <span style="font-weight:400;color:var(--text3);font-size:11px;">— not tied to a specific date, oldest visits first</span></div>
+    <div class="table-wrap"><table><tbody>
+      ${pending.length===0 ? `<tr class="empty-row"><td colspan="${isManager?6:5}">Nothing pending — you're all caught up.</td></tr>` :
+      pending.map(l => {
+        const owner = USERS.find(u => u.id === l.uid);
+        const days = l.opened ? Math.max(0, Math.round((now - new Date(l.opened)) / 86400000)) : null;
+        return `<tr>
+          <td style="font-weight:500;">${l.name}</td>
+          <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
+          <td style="font-size:11px;color:var(--text2);">${l.nextAction}</td>
+          <td style="font-size:11px;color:var(--text3);white-space:nowrap;">${days!==null?`${days}d ago`:"-"}</td>
+          ${isManager ? `<td style="font-size:11px;color:var(--text3);">${owner?owner.name:"?"}</td>` : ""}
+          <td><button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button></td>
+        </tr>`;
+      }).join("")}
+    </tbody></table></div>
+  </div>`;
+
+  return `
+  <div style="display:-webkit-flex;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="display:-webkit-flex;display:flex;align-items:center;gap:10px;">
+      <button class="btn btn-sm" onclick="calNav(-1)">‹</button>
+      <div style="font-size:15px;font-weight:600;color:var(--text);min-width:150px;text-align:center;">${monthLabel}</div>
+      <button class="btn btn-sm" onclick="calNav(1)">›</button>
+    </div>
+    <button class="btn btn-sm" onclick="window._calYear=${now.getFullYear()};window._calMonth=${now.getMonth()};window._calSelectedDay='${todayStr}';renderApp();">Today</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+    ${dowLabels.map(d=>`<div style="text-align:center;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:4px 0;">${d}</div>`).join("")}
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">
+    ${cells}
+  </div>
+
+  ${dayDetailHtml}
+  ${remindersHtml}`;
+}
+
+function calNav(delta) {
+  const now = new Date();
+  let y = window._calYear ?? now.getFullYear();
+  let m = (window._calMonth ?? now.getMonth()) + delta;
+  if (m < 0) { m = 11; y--; }
+  if (m > 11) { m = 0; y++; }
+  window._calYear = y;
+  window._calMonth = m;
+  renderApp();
+}
+
 
 // ─────────────────────────────────────────
 // CHARTS TAB — cross-filtering
@@ -1589,7 +1820,7 @@ function refreshAllCharts() {
   // Status
   if (chartInstances.status) {
     chartInstances.status.data.datasets[0].data = STATUSES.map(s => d.filter(l=>l.status===s).length);
-    const statusClrs = ["#f0a500","#3498db","#2ecc71","#e74c3c"]; // Quotation, Follow-up, Win, Lose
+    const statusClrs = ["#5a6070","#9b59b6","#f0a500","#2ecc71","#e74c3c"]; // Draft, Negotiation, Quotation, Win, Lose
     chartInstances.status.data.datasets[0].backgroundColor = STATUSES.map((s,i) => dimAlpha("status", s, statusClrs[i]));
     chartInstances.status.update();
   }
@@ -1725,7 +1956,7 @@ function renderCharts() {
   // Status chart
   chartInstances.status = new Chart(document.getElementById("chart-status"), {
     type:"bar",
-    data:{ labels:STATUSES, datasets:[{ data:STATUSES.map(s=>d.filter(l=>l.status===s).length), backgroundColor:["#f0a500","#3498db","#2ecc71","#e74c3c"], borderRadius:4 }] },
+    data:{ labels:STATUSES, datasets:[{ data:STATUSES.map(s=>d.filter(l=>l.status===s).length), backgroundColor:["#5a6070","#9b59b6","#f0a500","#2ecc71","#e74c3c"], borderRadius:4 }] },
     options: barOpts("x", (evt, els) => {
       if (!els.length) return;
       const label = chartInstances.status.data.labels[els[0].index];
@@ -1794,10 +2025,10 @@ function renderTeamTab() {
       q,
       win:   ql.filter(l=>l.status==="Win").reduce((s,l)=>s+Number(l.value||0),0),
       lose:  ql.filter(l=>l.status==="Lose").reduce((s,l)=>s+Number(l.value||0),0),
-      quot:  ql.filter(l=>l.status==="Quotation"||l.status==="Follow-up").reduce((s,l)=>s+Number(l.value||0),0),
+      quot:  ql.filter(l=>l.status!=="Win"&&l.status!=="Lose").reduce((s,l)=>s+Number(l.value||0),0),
       winC:  ql.filter(l=>l.status==="Win").length,
       loseC: ql.filter(l=>l.status==="Lose").length,
-      quotC: ql.filter(l=>l.status==="Quotation"||l.status==="Follow-up").length,
+      quotC: ql.filter(l=>l.status!=="Win"&&l.status!=="Lose").length,
     };
   });
 
@@ -1865,7 +2096,7 @@ function renderTeamTab() {
   // Summary row
   const totWin  = filtered.filter(l=>l.status==="Win").reduce((s,l)=>s+Number(l.value||0),0);
   const totLose = filtered.filter(l=>l.status==="Lose").reduce((s,l)=>s+Number(l.value||0),0);
-  const totPipe = filtered.filter(l=>l.status==="Quotation"||l.status==="Follow-up").reduce((s,l)=>s+Number(l.value||0),0);
+  const totPipe = filtered.filter(l=>l.status!=="Win"&&l.status!=="Lose").reduce((s,l)=>s+Number(l.value||0),0);
   html += `
   <div style="display:-webkit-flex;display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
     <div class="metric-card" style="-webkit-flex:1 1 120px;flex:1 1 120px;border-top:2px solid var(--green);">
@@ -1999,9 +2230,7 @@ async function quickSaveLead() {
   const clientStatus = document.getElementById("f-cstatus")?.value || "New";
   const mainProduct = document.getElementById("f-mainprod")?.value.trim() || "";
   const notes = document.getElementById("f-notes")?.value.trim() || "";
-
-  // Log Visit always lands in the Active Funnel as "Quotation" — no status field on this form
-  const status = "Quotation";
+  const status = document.getElementById("f-status")?.value || "Draft";
 
   const data = {
     name, phone, source, location, opened,
@@ -2013,8 +2242,9 @@ async function quickSaveLead() {
 
   leads.push({ id: nextId++, closed: "", timestamp: "", ...data });
   await saveToSheet("add", { ...data, brands: checked.join(", ") });
-  showSaveMsg(`✓ Visit logged — ${name} added to the Active Funnel`, "success");
-  activeTab = "funnel";
+  const destination = status === "Quotation" ? "funnel" : "logvisit";
+  showSaveMsg(status === "Quotation" ? `✓ ${name} added to the Active Funnel` : `✓ ${name} saved as ${status}`, "success");
+  activeTab = destination;
   renderApp();
 }
 
