@@ -876,9 +876,9 @@ function renderTabBar() {
   const isManager = currentUser.role === "manager";
   const tabs = [
     { id:"home",     label:"🏠 Home" },
-    { id:"logvisit", label:"📝 Log Visit" },
-    { id:"funnel",   label:"📊 Active Funnel" },
-    { id:"won",      label:"🎯 Won Targets" },
+    { id:"logvisit", label:"📝 Visit" },
+    { id:"funnel",   label:"📊 Funnel" },
+    { id:"won",      label:"🎯 Target" },
     { id:"calendar", label:"📅 Calendar" },
     { id:"leads",    label:"📋 All Accounts" },
     { id:"charts",   label:"📈 Charts" },
@@ -920,21 +920,21 @@ function renderHomeTab() {
     {
       id: "logvisit",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
-      title: "Log a Visit",
+      title: "Visit",
       desc: "Draft & Negotiation — visits not yet quoted",
       color: "#2ecc71"
     },
     {
       id: "funnel",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>`,
-      title: "Active Funnel",
+      title: "Funnel",
       desc: "Quotation & Follow-up accounts in play",
       color: "#3498db"
     },
     {
       id: "won",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/></svg>`,
-      title: "Won Targets",
+      title: "Target",
       desc: "Revenue target tracker & wins wall",
       color: "#2ecc71"
     },
