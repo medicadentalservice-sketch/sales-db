@@ -883,7 +883,7 @@ function renderTabBar() {
     { id:"funnel",   label:"📊 Funnel" },
     { id:"won",      label:"🎯 Target" },
     { id:"calendar", label:"📅 Calendar" },
-    { id:"leads",    label:"📋 All Accounts" },
+    { id:"leads",    label:"📋 Accounts" },
     { id:"charts",   label:"📈 Charts" },
   ];
   if (isManager) tabs.push({ id:"team", label:"👥 Team" });
@@ -951,7 +951,7 @@ function renderHomeTab() {
     {
       id: "leads",
       icon: `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>`,
-      title: "All Accounts",
+      title: "Accounts",
       desc: "Full table — every status, every visit",
       color: "var(--accent)"
     },
@@ -1012,7 +1012,46 @@ function renderHomeTab() {
   </div>`;
 }
 
+// Groups an already role-filtered lead list by account name. Never call this
+// with the raw `leads` array — always pass output of getMyLeads()/applyFilters()
+// so a salesman never sees another salesman's records grouped in.
+function groupLeadsByAccount(list) {
+  const map = {};
+  list.forEach(l => {
+    const key = l.name.trim().toLowerCase();
+    if (!map[key]) map[key] = { key, name: l.name.trim(), items: [] };
+    map[key].items.push(l);
+  });
+  return Object.values(map).map(g => {
+    const sorted = [...g.items].sort((a,b) => (a.opened||"") < (b.opened||"") ? 1 : -1);
+    const latest = sorted[0];
+    const totalValue = g.items.reduce((s,l)=>s+Number(l.value||0),0);
+    const uids = [...new Set(g.items.map(l=>l.uid))];
+    return {
+      key: g.key, name: g.name, location: latest.location, status: latest.status,
+      clientStatus: latest.clientStatus, visits: g.items.length, totalValue,
+      uids, lastVisit: latest.opened
+    };
+  }).sort((a,b) => (a.lastVisit||"") < (b.lastVisit||"") ? 1 : -1);
+}
+
+function viewAccount(key) { window._acctSelected = key; renderApp(); }
+function backToAccountsList() { window._acctSelected = null; renderApp(); }
+
 function renderLeadsTab() {
+  const sel = window._acctSelected;
+  if (sel) {
+    // Security: always drill down from getMyLeads(), never the raw `leads` array —
+    // a salesman must never see another salesman's records under a shared account name.
+    const myLeads = getMyLeads();
+    const items = myLeads.filter(l => l.name.trim().toLowerCase() === sel);
+    if (items.length > 0) return renderAccountDetailView(sel, items);
+    window._acctSelected = null;
+  }
+  return renderAccountsGroupedView();
+}
+
+function renderAccountsGroupedView() {
   const isManager = currentUser.role === "manager";
   const myLeads = getMyLeads();
   const filtered = applyFilters();
@@ -1040,6 +1079,57 @@ function renderLeadsTab() {
     return `<div class="ms-wrap"><button class="ms-btn ${sel.length>0?"active":""}" onclick="toggleDropdown('${id}',event)">${label}</button><div class="ms-dd" id="${id}">${allOpt}${opts}</div></div>`;
   }
 
+  const groups = groupLeadsByAccount(filtered);
+
+  let html = `<div class="table-card">`;
+  html += `<div class="table-toolbar">
+      <span class="filter-count">${groups.length} account${groups.length!==1?"s":""} · ${filtered.length} visit${filtered.length!==1?"s":""}${hasFilter?` (of ${myLeads.length})`:""}</span>
+      <div style="display:-webkit-flex;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text3);">Has a deal in:</span>
+        <div style="width:140px;">${msFilter('status','dd-status',STATUSES)}</div>
+        <span style="font-size:11px;color:var(--text3);">In city:</span>
+        <div style="width:140px;">${msFilter('location','dd-location',uniqueCities)}</div>
+        <span style="font-size:11px;color:var(--text3);">Client:</span>
+        <div style="width:100px;">${msFilter('clientStatus','dd-client',['New','Old'])}</div>
+        ${isManager ? `<span style="font-size:11px;color:var(--text3);">Handled by:</span>
+        <div style="width:150px;">${msFilter('salesman','dd-salesman',salesmen.map(u=>({val:String(u.id),lbl:u.name})))}</div>` : ""}
+        ${hasFilter ? `<button class="btn btn-sm btn-danger" onclick="clearFilters()">✕ Clear filters</button>` : ""}
+      </div>
+    </div>`;
+
+  html += `<div class="table-wrap"><table><thead><tr>
+    <th style="min-width:180px;"><span class="col-head">Account</span><input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg2);border-color:var(--border2);"/></th>
+    <th style="min-width:70px;"><span class="col-head">Visits</span></th>
+    <th style="min-width:100px;"><span class="col-head">Total Value</span></th>
+    <th style="min-width:90px;"><span class="col-head">Last Visit</span></th>
+    <th style="min-width:90px;"><span class="col-head">Actions</span></th>
+  </tr></thead><tbody>`;
+
+  if (groups.length === 0) {
+    html += `<tr class="empty-row"><td colspan="5">No accounts match your filters.</td></tr>`;
+  } else {
+    groups.forEach(g => {
+      const keyEsc = g.key.replace(/'/g,"\\'");
+      html += `<tr>
+        <td class="td-wrap"><a href="javascript:void(0)" onclick="viewAccount('${keyEsc}')" style="color:var(--accent);font-weight:600;text-decoration:none;">${g.name}</a></td>
+        <td style="font-size:12px;font-weight:600;text-align:center;">${g.visits}</td>
+        <td style="font-size:12px;font-weight:600;">${g.totalValue?"﷼"+g.totalValue.toLocaleString():"-"}</td>
+        <td style="font-size:11px;white-space:nowrap;">${g.lastVisit||"-"}</td>
+        <td style="white-space:nowrap;"><button class="btn btn-sm" onclick="viewAccount('${keyEsc}')">View</button></td>
+      </tr>`;
+    });
+  }
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+
+function renderAccountDetailView(key, items) {
+  const isManager = currentUser.role === "manager";
+  const sorted = [...items].sort((a,b) => (a.opened||"") < (b.opened||"") ? 1 : -1);
+  const accountName = sorted[0].name;
+  const latest = sorted[0];
+  const totalValue = items.reduce((s,l)=>s+Number(l.value||0),0);
+
   function fmtMonth(v) {
     if (!v) return "-";
     if (/^Q[1-4]$/.test(v)) return v;
@@ -1048,71 +1138,58 @@ function renderLeadsTab() {
     return d.toLocaleDateString("en-GB",{month:"short",year:"numeric"});
   }
 
-  let html = `<div class="table-card">`;
-  if (hasFilter) {
-    html += `<div class="table-toolbar">
-      <span class="filter-count">${filtered.length} / ${myLeads.length} accounts</span>
-      <button class="btn btn-sm btn-danger" onclick="clearFilters()">✕ Clear filters</button>
-    </div>`;
-  }
+  let html = `
+  <div style="margin-bottom:14px;">
+    <button class="btn btn-sm" onclick="backToAccountsList()">‹ Back to Accounts</button>
+  </div>
+  <div class="form-card" style="margin-bottom:16px;">
+    <div style="display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-start;">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">${accountName}</div>
+        <div style="font-size:12px;color:var(--text3);">${normalizeCity(latest.location)||"-"} · ${items.length} visit${items.length!==1?"s":""} · Last visit ${latest.opened||"-"}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;">Total Value</div>
+        <div style="font-size:22px;font-weight:700;color:var(--green);">﷼${totalValue.toLocaleString()}</div>
+      </div>
+    </div>
+  </div>
 
-  // Column order: By → Account → Location → Client → Status → Prob → Value → PO Date → SO → Brands → Main Product → Next Action → Contact → Date → Actions
-  html += `<div class="table-wrap"><table><thead><tr>
-    ${isManager ? `<th style="min-width:120px;"><span class="col-head">By</span>${msFilter('salesman','dd-salesman',salesmen.map(u=>({val:String(u.id),lbl:u.name})))}</th>` : ""}
-    <th style="min-width:130px;"><span class="col-head">Account</span><input placeholder="Search..." value="${filters.name}" oninput="setFilter('name',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/></th>
-    <th style="min-width:110px;"><span class="col-head">Location</span>${msFilter('location','dd-location',uniqueCities)}</th>
-    <th style="min-width:80px;"><span class="col-head">Client</span>${msFilter('clientStatus','dd-client',['New','Old'])}</th>
-    <th style="min-width:100px;"><span class="col-head">Status</span>${msFilter('status','dd-status',STATUSES)}</th>
-    <th style="min-width:80px;"><span class="col-head">Probability</span></th>
-    <th style="min-width:80px;"><span class="col-head">Value (SAR)</span></th>
-    <th style="min-width:90px;"><span class="col-head">PO Date</span></th>
-    <th style="min-width:90px;"><span class="col-head">Expected SO Qtr</span></th>
-    <th style="min-width:130px;"><span class="col-head">Brands</span>${msFilter('brands','dd-brands',BRANDS)}</th>
-    <th style="min-width:130px;"><span class="col-head">Main Product</span>${msFilter('mainProduct','dd-product',uniqueProducts)}</th>
-    <th style="min-width:130px;"><span class="col-head">Next Action</span><input placeholder="Search..." value="${filters.nextAction}" oninput="setFilter('nextAction',this.value)" style="font-size:11px;padding:4px 6px;background:var(--bg3);border-color:var(--border);"/></th>
-    <th style="min-width:110px;"><span class="col-head">Contact</span></th>
-    <th style="min-width:90px;"><span class="col-head">Date</span></th>
-    <th style="min-width:90px;"><span class="col-head">Actions</span></th>
-  </tr></thead><tbody>`;
-
-  if (filtered.length === 0) {
-    html += `<tr class="empty-row"><td colspan="${isManager?15:14}">No accounts match your filters.</td></tr>`;
-  } else {
-    filtered.forEach(l => {
+  <div class="table-card"><div class="table-wrap"><table><thead><tr>
+    <th><span class="col-head">Date</span></th>
+    <th><span class="col-head">Status</span></th>
+    <th><span class="col-head">Value (SAR)</span></th>
+    <th><span class="col-head">Expected SO Qtr</span></th>
+    <th><span class="col-head">Brands</span></th>
+    <th><span class="col-head">Main Product</span></th>
+    <th><span class="col-head">Next Action</span></th>
+    <th><span class="col-head">Contact</span></th>
+    ${isManager ? `<th><span class="col-head">By</span></th>` : ""}
+    <th><span class="col-head">Actions</span></th>
+  </tr></thead><tbody>
+    ${sorted.map(l => {
       const owner = USERS.find(u => u.id === l.uid);
       const brandPills = (l.brands||[]).map(b => `<span class="brand-pill">${b}</span>`).join("");
-      const cityNorm = normalizeCity(l.location);
-      const showCity = l.location && cityNorm !== l.location.trim() && cityNorm !== "Other";
-      const prodNorm = normalizeProduct(l.mainProduct);
-      const showProd = l.mainProduct && prodNorm !== l.mainProduct.trim();
-      const probColor = !l.probability ? "var(--text3)" :
-        parseInt(l.probability) >= 70 ? "var(--green)" :
-        parseInt(l.probability) >= 40 ? "var(--accent)" : "var(--red)";
-      html += `<tr>
-        ${isManager ? `<td style="font-size:11px;color:var(--text2);white-space:nowrap;">${owner?owner.name:"?"}</td>` : ""}
-        <td class="td-wrap">${l.name} <span class="${l.imported?"b-sheet":"b-new-entry"} badge">${l.imported?"sheet":"new"}</span></td>
-        <td class="td-wrap">${l.location||"-"}${showCity?`<br><span class="city-pill">${cityNorm}</span>`:""}</td>
-        <td><span class="badge ${l.clientStatus==="New"?"b-new":"b-old"}">${l.clientStatus||"-"}</span></td>
+      return `<tr>
+        <td style="font-size:11px;white-space:nowrap;">${l.opened||"-"}</td>
         <td><span class="badge ${badgeClass(l.status)}">${l.status}</span></td>
-        <td style="font-size:12px;font-weight:600;color:${probColor};">${l.probability||"-"}</td>
-        <td style="font-size:11px;">${l.value?Number(l.value).toLocaleString():"-"}</td>
-        <td style="font-size:11px;">${fmtMonth(l.poDate)}</td>
-        <td style="font-size:11px;">${fmtMonth(l.soDate)}</td>
+        <td style="font-size:12px;">${l.value?"﷼"+Number(l.value).toLocaleString():"-"}</td>
+        <td style="font-size:12px;">${fmtMonth(l.soDate)}</td>
         <td class="td-wrap">${brandPills||"-"}</td>
-        <td class="td-wrap" style="font-size:11px;">${l.mainProduct||"-"}${showProd?`<br><span class="prod-pill">${prodNorm}</span>`:""}</td>
+        <td class="td-wrap" style="font-size:11px;">${l.mainProduct||"-"}</td>
         <td class="td-wrap" style="font-size:11px;">${l.nextAction||"-"}</td>
         <td style="font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${l.contact||""}">${l.contact||"-"}</td>
-        <td style="font-size:11px;white-space:nowrap;">${l.opened||"-"}</td>
+        ${isManager ? `<td style="font-size:11px;color:var(--text2);">${owner?owner.name:"?"}</td>` : ""}
         <td style="white-space:nowrap;">
           <button class="btn btn-sm" onclick="startEdit(${l.id})">Edit</button>
           ${isManager ? ` <button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Del</button>` : ""}
         </td>
       </tr>`;
-    });
-  }
-  html += `</tbody></table></div></div>`;
+    }).join("")}
+  </tbody></table></div></div>`;
   return html;
 }
+
 
 // ─────────────────────────────────────────
 // LOG VISIT TAB — minimal daily-log entry
@@ -2129,7 +2206,7 @@ function setTimePeriod(p) {
   if(activeTab === "charts") setTimeout(() => renderCharts(), 50);
 }
 
-function switchTab(t) { activeTab = t; if (t !== "add") editingId = null; renderApp(); }
+function switchTab(t) { activeTab = t; if (t !== "add") editingId = null; if (t === "leads") window._acctSelected = null; renderApp(); }
 function startEdit(id) { returnTab = activeTab !== "add" ? activeTab : (returnTab || "leads"); editingId = id; activeTab = "add"; renderApp(); }
 function cancelEdit() { editingId = null; activeTab = returnTab || "leads"; renderApp(); }
 function setFilter(key, val) { filters[key] = val; renderApp(); }
